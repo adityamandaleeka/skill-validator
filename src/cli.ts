@@ -22,10 +22,16 @@ class Spinner {
   private interval: ReturnType<typeof setInterval> | null = null;
   private frame = 0;
   private message = "";
+  private animate: boolean;
+
+  constructor(verbose: boolean = false) {
+    // No animation in CI, non-TTY, or verbose mode (verbose logs would clobber it)
+    this.animate = isInteractive && !verbose;
+  }
 
   start(message: string): void {
     this.message = message;
-    if (!isInteractive) {
+    if (!this.animate) {
       process.stderr.write(`${message}\n`);
       return;
     }
@@ -39,7 +45,7 @@ class Spinner {
 
   update(message: string): void {
     this.message = message;
-    if (!isInteractive) {
+    if (!this.animate) {
       process.stderr.write(`${message}\n`);
     }
   }
@@ -49,7 +55,7 @@ class Spinner {
       clearInterval(this.interval);
       this.interval = null;
     }
-    if (isInteractive) {
+    if (this.animate) {
       process.stderr.write(`\r${" ".repeat(this.message.length + 4)}\r`);
     }
     if (finalMessage) {
@@ -184,7 +190,7 @@ export async function run(config: ValidatorConfig): Promise<number> {
 
     console.log(`🔍 Evaluating ${skill.name}...`);
     const comparisons: ScenarioComparison[] = [];
-    const spinner = new Spinner();
+    const spinner = new Spinner(config.verbose);
 
     for (const scenario of skill.evalConfig.scenarios) {
       console.log(`   📋 Scenario: ${scenario.name}`);
