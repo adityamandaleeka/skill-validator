@@ -14,6 +14,7 @@ export interface RunOptions {
   skill: SkillInfo | null;
   model: string;
   verbose: boolean;
+  log?: (message: string) => void;
   client?: unknown;
 }
 
@@ -142,10 +143,11 @@ export async function runAgent(options: RunOptions): Promise<RunMetrics> {
         }
 
         if (verbose) {
+          const write = options.log ?? ((msg: string) => process.stderr.write(`${msg}\n`));
           if (event.type === "tool.execution_start") {
-            process.stderr.write(`      🔧 ${event.data.toolName}\n`);
+            write(`      🔧 ${event.data.toolName}`);
           } else if (event.type === "assistant.message") {
-            process.stderr.write(`      💬 Response received\n`);
+            write(`      💬 Response received`);
           }
         }
 

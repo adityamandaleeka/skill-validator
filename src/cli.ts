@@ -22,45 +22,59 @@ class Spinner {
   private interval: ReturnType<typeof setInterval> | null = null;
   private frame = 0;
   private message = "";
-  private animate: boolean;
-
-  constructor(verbose: boolean = false) {
-    // No animation in CI, non-TTY, or verbose mode (verbose logs would clobber it)
-    this.animate = isInteractive && !verbose;
-  }
+  private active = false;
 
   start(message: string): void {
     this.message = message;
-    if (!this.animate) {
+    this.active = true;
+    if (!isInteractive) {
       process.stderr.write(`${message}\n`);
       return;
     }
     this.frame = 0;
+    this.render();
     this.interval = setInterval(() => {
-      const f = SPINNER_FRAMES[this.frame % SPINNER_FRAMES.length];
-      process.stderr.write(`\r${chalk.cyan(f)} ${this.message}`);
       this.frame++;
+      this.render();
     }, 80);
   }
 
   update(message: string): void {
     this.message = message;
-    if (!this.animate) {
+    if (!isInteractive) {
       process.stderr.write(`${message}\n`);
     }
   }
 
+  /** Write a log line without clobbering the spinner */
+  log(text: string): void {
+    if (this.active && isInteractive) {
+      // Clear spinner line, write log, redraw spinner
+      process.stderr.write(`\r\x1b[K${text}\n`);
+      this.render();
+    } else {
+      process.stderr.write(`${text}\n`);
+    }
+  }
+
   stop(finalMessage?: string): void {
+    this.active = false;
     if (this.interval) {
       clearInterval(this.interval);
       this.interval = null;
     }
-    if (this.animate) {
-      process.stderr.write(`\r${" ".repeat(this.message.length + 4)}\r`);
+    if (isInteractive) {
+      process.stderr.write(`\r\x1b[K`);
     }
     if (finalMessage) {
       process.stderr.write(`${finalMessage}\n`);
     }
+  }
+
+  private render(): void {
+    if (!isInteractive) return;
+    const f = SPINNER_FRAMES[this.frame % SPINNER_FRAMES.length];
+    process.stderr.write(`\r\x1b[K${chalk.cyan(f)} ${this.message}`);
   }
 }
 
@@ -190,7 +204,8 @@ export async function run(config: ValidatorConfig): Promise<number> {
 
     console.log(`🔍 Evaluating ${skill.name}...`);
     const comparisons: ScenarioComparison[] = [];
-    const spinner = new Spinner(config.verbose);
+    const spinner = new Spinner();
+    const log = (msg: string) => spinner.log(msg);
 
     for (const scenario of skill.evalConfig.scenarios) {
       console.log(`   📋 Scenario: ${scenario.name}`);
@@ -211,12 +226,14 @@ export async function run(config: ValidatorConfig): Promise<number> {
             skill: null,
             model: config.model,
             verbose: config.verbose,
+            log,
           }),
           runAgent({
             scenario,
             skill,
             model: config.model,
             verbose: config.verbose,
+            log,
           }),
         ]);
 
