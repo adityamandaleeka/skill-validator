@@ -18,29 +18,30 @@ You've built a bunch of skills. But are they actually helping — or just adding
 ```bash
 npm install
 npm run build
+npm link        # makes `skill-validator` available globally
 ```
 
 ## Usage
 
 ```bash
 # Validate all skills in a directory
-npx tsx src/index.ts ./path/to/skills/
+skill-validator ./path/to/skills/
 
 # Validate a single skill
-npx tsx src/index.ts ./path/to/my-skill/
+skill-validator ./path/to/my-skill/
 
 # Verbose output with per-scenario breakdowns
-npx tsx src/index.ts --verbose ./skills/
+skill-validator --verbose ./skills/
 
 # Custom model and threshold
-npx tsx src/index.ts --model claude-sonnet-4.5 --min-improvement 0.2 ./skills/
+skill-validator --model claude-sonnet-4.5 --min-improvement 0.2 ./skills/
 
 # Output as JSON or JUnit XML
-npx tsx src/index.ts --reporter json:results.json ./skills/
-npx tsx src/index.ts --reporter junit:results.xml ./skills/
+skill-validator --reporter json:results.json ./skills/
+skill-validator --reporter junit:results.xml ./skills/
 
 # Strict mode (require all skills to have evals)
-npx tsx src/index.ts --strict ./skills/
+skill-validator --strict ./skills/
 ```
 
 ## Writing eval files
