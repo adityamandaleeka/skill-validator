@@ -71,17 +71,10 @@ export async function runAgent(options: RunOptions): Promise<RunMetrics> {
   try {
     const client = await getSharedClient(verbose);
 
-    const systemMessage = skill
-      ? {
-          mode: "append" as const,
-          content: `\n\nYou have access to the following skill. Use the knowledge and instructions it provides when relevant to the user's request. Do NOT mention the skill by name or tell the user about it — just apply the knowledge naturally.\n\n<skill_instructions name="${skill.name}">\n${skill.skillMdContent}\n</skill_instructions>`,
-        }
-      : undefined;
-
     const session = await client.createSession({
       model,
       streaming: true,
-      systemMessage,
+      skillDirectories: skill ? [skill.path] : [],
       infiniteSessions: { enabled: false },
       onPermissionRequest: async () => ({ kind: "approved" as const }),
     });
