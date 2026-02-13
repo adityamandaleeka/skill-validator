@@ -1,6 +1,5 @@
-import { resolve } from "node:path";
 import type { JudgeResult, RubricScore, RunMetrics, EvalScenario } from "./types.js";
-import { getSharedClient } from "./runner.js";
+import { getSharedClient, checkPermission } from "./runner.js";
 
 export interface JudgeOptions {
   model: string;
@@ -46,13 +45,14 @@ async function judgeRunOnce(
   const session = await client.createSession({
     model: options.model,
     streaming: true,
+    workingDirectory: options.workDir,
     systemMessage: {
       mode: "replace",
       content: buildJudgeSystemPrompt(),
     },
     infiniteSessions: { enabled: false },
     onPermissionRequest: async (req: Record<string, unknown>) => {
-      return checkJudgePermission(req, options.workDir, options.skillPath);
+      return checkPermission(req, options.workDir, options.skillPath);
     },
   });
 
@@ -260,21 +260,4 @@ function extractOutermostJson(text: string): string | null {
   return null;
 }
 
-export function checkJudgePermission(
-  req: Record<string, unknown>,
-  workDir: string,
-  skillPath?: string
-): { kind: "approved" } | { kind: "denied-by-rules" } {
-  const reqPath = String(req.path ?? req.command ?? "");
-  if (!reqPath) return { kind: "approved" };
 
-  const resolved = resolve(reqPath);
-  const allowedDirs = [resolve(workDir)];
-  if (skillPath) allowedDirs.push(resolve(skillPath));
-
-  if (allowedDirs.some((dir) => resolved.startsWith(dir))) {
-    return { kind: "approved" };
-  }
-
-  return { kind: "denied-by-rules" };
-}
