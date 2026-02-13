@@ -69,6 +69,11 @@ describe("checkPermission", () => {
     expect(result).toEqual({ kind: "denied-by-rules" });
   });
 
+  it("denies paths with a shared prefix but different directory", () => {
+    const result = checkPermission({ path: "/tmp/work-attacker/evil.sh" }, "/tmp/work");
+    expect(result).toEqual({ kind: "denied-by-rules" });
+  });
+
   it("checks command field when path is absent", () => {
     const result = checkPermission({ command: "/etc/shadow" }, "/tmp/work");
     expect(result).toEqual({ kind: "denied-by-rules" });

@@ -1,6 +1,6 @@
 import { mkdtemp, cp, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, dirname, resolve } from "node:path";
+import { join, dirname, resolve, sep } from "node:path";
 import type {
   EvalScenario,
   RunMetrics,
@@ -72,7 +72,7 @@ export function checkPermission(
   const allowedDirs = [resolve(workDir)];
   if (skillPath) allowedDirs.push(resolve(skillPath));
 
-  if (allowedDirs.some((dir) => resolved.startsWith(dir))) {
+  if (allowedDirs.some((dir) => resolved === dir || resolved.startsWith(dir + sep))) {
     return { kind: "approved" };
   }
 
