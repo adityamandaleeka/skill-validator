@@ -26,7 +26,8 @@ export async function reportResults(
 export async function saveRunResults(
   verdicts: SkillVerdict[],
   resultsDir: string,
-  model?: string
+  model?: string,
+  judgeModel?: string
 ): Promise<string> {
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
   const runDir = join(resultsDir, `run-${timestamp}`);
@@ -35,6 +36,7 @@ export async function saveRunResults(
   // Save full results JSON with metadata
   const output = {
     model: model ?? "unknown",
+    judgeModel: judgeModel ?? model ?? "unknown",
     timestamp: new Date().toISOString(),
     verdicts,
   };

@@ -124,6 +124,7 @@ export interface ValidatorConfig {
   strict: boolean;
   verbose: boolean;
   model: string;
+  judgeModel: string;
   runs: number;
   judgeTimeout: number;
   reporters: ReporterSpec[];

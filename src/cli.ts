@@ -42,6 +42,7 @@ export function createProgram(): Command {
     .option("--strict", "Strict mode: require evals and fail on any issue", false)
     .option("--verbose", "Show detailed per-scenario breakdowns", false)
     .option("--model <name>", "Model to use for agent runs", "claude-opus-4.6")
+    .option("--judge-model <name>", "Model to use for judging (defaults to --model)")
     .option("--runs <number>", "Number of runs per scenario for averaging", "3")
     .option("--judge-timeout <number>", "Judge timeout in seconds", "120")
     .option(
@@ -63,6 +64,7 @@ export function createProgram(): Command {
         strict: opts.strict,
         verbose: opts.verbose,
         model: opts.model,
+        judgeModel: opts.judgeModel || opts.model,
         runs: parseInt(opts.runs, 10),
         judgeTimeout: parseInt(opts.judgeTimeout, 10) * 1000,
         reporters:
@@ -87,14 +89,19 @@ export async function run(config: ValidatorConfig): Promise<number> {
     const client = await getSharedClient(config.verbose);
     const models = await client.listModels();
     const modelIds = models.map((m: { id: string }) => m.id);
-    if (!modelIds.includes(config.model)) {
-      console.error(
-        `Invalid model: "${config.model}"\n` +
-        `Available models: ${modelIds.join(", ")}`
-      );
-      return 1;
+    const modelsToValidate = [config.model];
+    if (config.judgeModel !== config.model) modelsToValidate.push(config.judgeModel);
+    for (const m of modelsToValidate) {
+      if (!modelIds.includes(m)) {
+        console.error(
+          `Invalid model: "${m}"\n` +
+          `Available models: ${modelIds.join(", ")}`
+        );
+        return 1;
+      }
     }
-    console.log(`Using model: ${config.model}`);
+    console.log(`Using model: ${config.model}` +
+      (config.judgeModel !== config.model ? `, judge: ${config.judgeModel}` : ""));
   } catch (error) {
     console.error(`Failed to validate model: ${error}`);
     return 1;
@@ -187,14 +194,14 @@ export async function run(config: ValidatorConfig): Promise<number> {
         // Judge both runs in parallel
         const [baselineJudge, withSkillJudge] = await Promise.all([
           judgeRun(scenario, baselineMetrics, {
-            model: config.model,
+            model: config.judgeModel,
             verbose: config.verbose,
             timeout: config.judgeTimeout,
             workDir: baselineMetrics.workDir,
             skillPath: skill.path,
           }),
           judgeRun(scenario, withSkillMetrics, {
-            model: config.model,
+            model: config.judgeModel,
             verbose: config.verbose,
             timeout: config.judgeTimeout,
             workDir: withSkillMetrics.workDir,
@@ -234,7 +241,7 @@ export async function run(config: ValidatorConfig): Promise<number> {
   await reportResults(verdicts, config.reporters, config.verbose);
 
   if (config.saveResults) {
-    const runDir = await saveRunResults(verdicts, config.resultsDir, config.model);
+    const runDir = await saveRunResults(verdicts, config.resultsDir, config.model, config.judgeModel);
     console.log(chalk.dim(`Run results saved to ${runDir}`));
   }
 
