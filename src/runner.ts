@@ -1,6 +1,6 @@
 import { mkdtemp, cp, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, dirname } from "node:path";
+import { join, dirname, resolve } from "node:path";
 import type {
   EvalScenario,
   RunMetrics,
@@ -60,16 +60,40 @@ export async function stopSharedClient(): Promise<void> {
   }
 }
 
+export function checkPermission(
+  req: Record<string, unknown>,
+  workDir: string,
+  skillPath?: string
+): { kind: "approved" } | { kind: "denied-by-rules" } {
+  const reqPath = String(req.path ?? req.command ?? "");
+  if (!reqPath) return { kind: "approved" };
+
+  const resolved = resolve(reqPath);
+  const allowedDirs = [resolve(workDir)];
+  if (skillPath) allowedDirs.push(resolve(skillPath));
+
+  if (allowedDirs.some((dir) => resolved.startsWith(dir))) {
+    return { kind: "approved" };
+  }
+
+  return { kind: "denied-by-rules" };
+}
+
 export function buildSessionConfig(
   skill: SkillInfo | null,
-  model: string
+  model: string,
+  workDir: string
 ): Record<string, unknown> {
+  const skillPath = skill ? dirname(skill.path) : undefined;
   return {
     model,
     streaming: true,
-    skillDirectories: skill ? [dirname(skill.path)] : [],
+    workingDirectory: workDir,
+    skillDirectories: skill ? [skillPath!] : [],
     infiniteSessions: { enabled: false },
-    onPermissionRequest: async () => ({ kind: "approved" as const }),
+    onPermissionRequest: async (req: Record<string, unknown>) => {
+      return checkPermission(req, workDir, skillPath);
+    },
   };
 }
 
@@ -85,7 +109,7 @@ export async function runAgent(options: RunOptions): Promise<RunMetrics> {
     const client = await getSharedClient(verbose);
 
     const session = await client.createSession(
-      buildSessionConfig(skill, model)
+      buildSessionConfig(skill, model, workDir)
     );
 
     const idlePromise = new Promise<void>((resolve, reject) => {
