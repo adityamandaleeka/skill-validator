@@ -13,6 +13,11 @@ You've built a bunch of skills. But are they actually helping — or just adding
 5. Uses LLM-as-judge to score output quality (rubric + holistic assessment)
 6. Compares results and produces a verdict: does the skill actually help?
 
+## Prerequisites
+
+- Node.js >= 20
+- Authenticated with GitHub via `gh auth login` (the SDK picks up your credentials automatically)
+
 ## Install
 
 ```bash
