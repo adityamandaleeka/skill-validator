@@ -87,12 +87,19 @@ export async function judgeRun(
 }
 
 function buildJudgeSystemPrompt(): string {
-  return `You are an expert evaluator assessing the quality of an AI agent's output.
+  return `You are an expert evaluator assessing the quality of an AI agent's work.
 You will be given:
 1. The task prompt the agent was asked to perform
-2. The agent's output
+2. The agent's final output
 3. Metrics about the agent's execution (tool calls, timing, errors)
-4. A rubric of criteria to evaluate
+4. A full session timeline showing every step the agent took — messages, tool calls, tool results, and errors
+5. A rubric of criteria to evaluate
+
+Use the session timeline to understand the agent's full reasoning process, not just its final output. Consider:
+- Did the agent take an efficient path or waste steps?
+- Did it recover from errors or get stuck?
+- Did tool calls produce useful results that informed the output?
+- Was the agent's approach methodical or haphazard?
 
 For each rubric criterion, provide an integer score from 1-5:
   1 = Very poor, criterion not met at all
@@ -133,6 +140,7 @@ function buildJudgeUserPrompt(
 - Time: ${(metrics.wallTimeMs / 1000).toFixed(1)}s
 - Errors: ${metrics.errorCount}
 - Estimated tokens: ${metrics.tokenEstimate}`,
+    `## Session Timeline\n${formatSessionTimeline(metrics.events)}`,
   ];
 
   if (rubric.length > 0) {
@@ -146,6 +154,57 @@ function buildJudgeUserPrompt(
   }
 
   return sections.join("\n\n");
+}
+
+function formatSessionTimeline(events: RunMetrics["events"]): string {
+  const relevant = events.filter((e) =>
+    [
+      "user.message",
+      "assistant.message",
+      "tool.execution_start",
+      "tool.execution_complete",
+      "session.error",
+      "runner.error",
+    ].includes(e.type)
+  );
+
+  if (relevant.length === 0) return "(no events recorded)";
+
+  return relevant
+    .map((e) => {
+      switch (e.type) {
+        case "user.message":
+          return `[USER] ${truncateForJudge(String(e.data.content || ""), 200)}`;
+        case "assistant.message": {
+          const content = String(e.data.content || "");
+          const toolReqs = e.data.toolRequests;
+          const tools = Array.isArray(toolReqs)
+            ? toolReqs.map((t: any) => t.name).join(", ")
+            : "";
+          const parts = [];
+          if (content) parts.push(truncateForJudge(content, 500));
+          if (tools) parts.push(`(called tools: ${tools})`);
+          return `[ASSISTANT] ${parts.join(" ")}`;
+        }
+        case "tool.execution_start":
+          return `[TOOL START] ${e.data.toolName}: ${truncateForJudge(String(e.data.arguments || ""), 200)}`;
+        case "tool.execution_complete": {
+          const success = e.data.success === "True" || e.data.success === true;
+          const result = truncateForJudge(String(e.data.result || ""), 300);
+          return `[TOOL ${success ? "OK" : "FAIL"}] ${result}`;
+        }
+        case "session.error":
+        case "runner.error":
+          return `[ERROR] ${e.data.message}`;
+        default:
+          return `[${e.type}]`;
+      }
+    })
+    .join("\n");
+}
+
+function truncateForJudge(s: string, max: number): string {
+  return s.length > max ? s.slice(0, max - 3) + "..." : s;
 }
 
 function parseJudgeResponse(

@@ -144,21 +144,25 @@ function reportScenarioDetail(
   const bRubric = avgRubricScore(scenario.baseline.judgeResult.rubricScores);
   const sRubric = avgRubricScore(scenario.withSkill.judgeResult.rubricScores);
 
-  const metrics: [string, number, string][] = [
-    ["Tokens", bd.tokenReduction, `${b.tokenEstimate} → ${s.tokenEstimate}`],
-    ["Tool calls", bd.toolCallReduction, `${b.toolCallCount} → ${s.toolCallCount}`],
-    ["Task completion", bd.taskCompletionImprovement, `${fmtBool(b.taskCompleted)} → ${fmtBool(s.taskCompleted)}`],
-    ["Time", bd.timeReduction, `${fmtMs(b.wallTimeMs)} → ${fmtMs(s.wallTimeMs)}`],
-    ["Quality (rubric)", bd.qualityImprovement, `${bRubric.toFixed(1)}/5 → ${sRubric.toFixed(1)}/5`],
-    ["Quality (overall)", bd.overallJudgmentImprovement, `${scenario.baseline.judgeResult.overallScore.toFixed(1)}/5 → ${scenario.withSkill.judgeResult.overallScore.toFixed(1)}/5`],
-    ["Errors", bd.errorReduction, `${b.errorCount} → ${s.errorCount}`],
+  // [label, improvementValue, absoluteStr, lowerIsBetter]
+  const metrics: [string, number, string, boolean][] = [
+    ["Tokens", bd.tokenReduction, `${b.tokenEstimate} → ${s.tokenEstimate}`, true],
+    ["Tool calls", bd.toolCallReduction, `${b.toolCallCount} → ${s.toolCallCount}`, true],
+    ["Task completion", bd.taskCompletionImprovement, `${fmtBool(b.taskCompleted)} → ${fmtBool(s.taskCompleted)}`, false],
+    ["Time", bd.timeReduction, `${fmtMs(b.wallTimeMs)} → ${fmtMs(s.wallTimeMs)}`, true],
+    ["Quality (rubric)", bd.qualityImprovement, `${bRubric.toFixed(1)}/5 → ${sRubric.toFixed(1)}/5`, false],
+    ["Quality (overall)", bd.overallJudgmentImprovement, `${scenario.baseline.judgeResult.overallScore.toFixed(1)}/5 → ${scenario.withSkill.judgeResult.overallScore.toFixed(1)}/5`, false],
+    ["Errors", bd.errorReduction, `${b.errorCount} → ${s.errorCount}`, true],
   ];
 
-  for (const [label, value, absolute] of metrics) {
+  for (const [label, value, absolute, lowerIsBetter] of metrics) {
+    // Green = good, Red = bad (based on improvement direction)
     const color =
       value > 0 ? chalk.green : value < 0 ? chalk.red : chalk.dim;
+    // For "lower is better" metrics, show the actual change (negative = went down = good)
+    const displayValue = lowerIsBetter ? -value : value;
     console.log(
-      `      ${chalk.dim(label.padEnd(20))} ${color(formatDelta(value).padEnd(10))} ${chalk.dim(absolute)}`
+      `      ${chalk.dim(label.padEnd(20))} ${color(formatDelta(displayValue).padEnd(10))} ${chalk.dim(absolute)}`
     );
   }
 

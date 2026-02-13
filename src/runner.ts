@@ -1,6 +1,6 @@
 import { mkdtemp, cp, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
 import type {
   EvalScenario,
   RunMetrics,
@@ -60,6 +60,19 @@ export async function stopSharedClient(): Promise<void> {
   }
 }
 
+export function buildSessionConfig(
+  skill: SkillInfo | null,
+  model: string
+): Record<string, unknown> {
+  return {
+    model,
+    streaming: true,
+    skillDirectories: skill ? [dirname(skill.path)] : [],
+    infiniteSessions: { enabled: false },
+    onPermissionRequest: async () => ({ kind: "approved" as const }),
+  };
+}
+
 export async function runAgent(options: RunOptions): Promise<RunMetrics> {
   const { scenario, skill, model, verbose } = options;
   const workDir = await setupWorkDir(scenario, skill?.path ?? null);
@@ -71,13 +84,9 @@ export async function runAgent(options: RunOptions): Promise<RunMetrics> {
   try {
     const client = await getSharedClient(verbose);
 
-    const session = await client.createSession({
-      model,
-      streaming: true,
-      skillDirectories: skill ? [skill.path] : [],
-      infiniteSessions: { enabled: false },
-      onPermissionRequest: async () => ({ kind: "approved" as const }),
-    });
+    const session = await client.createSession(
+      buildSessionConfig(skill, model)
+    );
 
     const idlePromise = new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => {
