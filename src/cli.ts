@@ -43,7 +43,7 @@ export function createProgram(): Command {
     .option("--verbose", "Show detailed per-scenario breakdowns", false)
     .option("--model <name>", "Model to use for agent runs", "claude-opus-4.6")
     .option("--runs <number>", "Number of runs per scenario for averaging", "3")
-    .option("--no-save-results", "Disable saving run results to disk")
+    .option("--judge-timeout <number>", "Judge timeout in seconds", "120")
     .option(
       "--results-dir <path>",
       "Directory to save run results",
@@ -64,6 +64,7 @@ export function createProgram(): Command {
         verbose: opts.verbose,
         model: opts.model,
         runs: parseInt(opts.runs, 10),
+        judgeTimeout: parseInt(opts.judgeTimeout, 10) * 1000,
         reporters:
           opts.reporter.length > 0
             ? opts.reporter
@@ -170,10 +171,12 @@ export async function run(config: ValidatorConfig): Promise<number> {
           judgeRun(scenario, baselineMetrics, {
             model: config.model,
             verbose: config.verbose,
+            timeout: config.judgeTimeout,
           }),
           judgeRun(scenario, withSkillMetrics, {
             model: config.model,
             verbose: config.verbose,
+            timeout: config.judgeTimeout,
           }),
         ]);
 

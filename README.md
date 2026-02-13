@@ -119,6 +119,7 @@ A skill **passes** if its average improvement score across scenarios meets the t
 | `--verbose` | `false` | Show per-scenario metric breakdowns |
 | `--model <name>` | `gpt-4.1` | Model for agent runs and judging |
 | `--runs <n>` | `3` | Runs per scenario (averaged for stability) |
+| `--judge-timeout <n>` | `120` | Judge LLM timeout in seconds |
 | `--reporter <spec>` | `console` | Output format: `console`, `json:path`, `junit:path` |
 
 ## CI integration

@@ -4,6 +4,7 @@ import { getSharedClient } from "./runner.js";
 export interface JudgeOptions {
   model: string;
   verbose: boolean;
+  timeout: number;
 }
 
 export async function judgeRun(
@@ -29,7 +30,7 @@ export async function judgeRun(
     const userPrompt = buildJudgeUserPrompt(scenario, metrics, rubric);
     const response = await session.sendAndWait(
       { prompt: userPrompt },
-      120_000
+      options.timeout
     );
 
     await session.destroy();
