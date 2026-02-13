@@ -189,9 +189,10 @@ export async function run(config: ValidatorConfig): Promise<number> {
     for (const scenario of skill.evalConfig.scenarios) {
       console.log(`   📋 Scenario: ${scenario.name}`);
 
-      // Run N times and average
+      // Run N times and average, pipelining judge calls with next run
       const baselineRuns: RunResult[] = [];
       const withSkillRuns: RunResult[] = [];
+      const pendingJudges: Promise<void>[] = [];
 
       for (let i = 0; i < config.runs; i++) {
         const runLabel = `Run ${i + 1}/${config.runs}`;
@@ -235,36 +236,44 @@ export async function run(config: ValidatorConfig): Promise<number> {
           withSkillMetrics.taskCompleted = withSkillMetrics.errorCount === 0;
         }
 
-        // Judge both runs in parallel
-        spinner.update(`      ${runLabel}: judging...`);
-        const [baselineJudge, withSkillJudge] = await Promise.all([
-          judgeRun(scenario, baselineMetrics, {
-            model: config.judgeModel,
-            verbose: config.verbose,
-            timeout: config.judgeTimeout,
-            workDir: baselineMetrics.workDir,
-            skillPath: skill.path,
-          }),
-          judgeRun(scenario, withSkillMetrics, {
-            model: config.judgeModel,
-            verbose: config.verbose,
-            timeout: config.judgeTimeout,
-            workDir: withSkillMetrics.workDir,
-            skillPath: skill.path,
-          }),
-        ]);
+        // Fire off judge calls — they run concurrently with the next iteration's agent runs
+        const judgePromise = (async () => {
+          const [baselineJudge, withSkillJudge] = await Promise.all([
+            judgeRun(scenario, baselineMetrics, {
+              model: config.judgeModel,
+              verbose: config.verbose,
+              timeout: config.judgeTimeout,
+              workDir: baselineMetrics.workDir,
+              skillPath: skill.path,
+            }),
+            judgeRun(scenario, withSkillMetrics, {
+              model: config.judgeModel,
+              verbose: config.verbose,
+              timeout: config.judgeTimeout,
+              workDir: withSkillMetrics.workDir,
+              skillPath: skill.path,
+            }),
+          ]);
 
-        baselineRuns.push({
-          metrics: baselineMetrics,
-          judgeResult: baselineJudge,
-        });
+          baselineRuns.push({
+            metrics: baselineMetrics,
+            judgeResult: baselineJudge,
+          });
 
-        withSkillRuns.push({
-          metrics: withSkillMetrics,
-          judgeResult: withSkillJudge,
-        });
-        spinner.stop(`      ✓ ${runLabel} complete`);
+          withSkillRuns.push({
+            metrics: withSkillMetrics,
+            judgeResult: withSkillJudge,
+          });
+        })();
+
+        pendingJudges.push(judgePromise);
+        spinner.stop(`      ✓ ${runLabel} agents complete, judging in background...`);
       }
+
+      // Wait for all judge calls to finish
+      spinner.start(`      Waiting for judges to complete...`);
+      await Promise.all(pendingJudges);
+      spinner.stop(`      ✓ All ${config.runs} run(s) judged`);
 
       // Average results across runs
       const avgBaseline = averageResults(baselineRuns);
