@@ -4,7 +4,7 @@ export function collectMetrics(
   events: AgentEvent[],
   agentOutput: string,
   wallTimeMs: number,
-  _workDir: string
+  workDir: string
 ): RunMetrics {
   let tokenEstimate = 0;
   let hasRealTokenCounts = false;
@@ -70,5 +70,6 @@ export function collectMetrics(
     taskCompleted: false,
     agentOutput,
     events,
+    workDir,
   };
 }

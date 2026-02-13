@@ -61,6 +61,7 @@ export interface RunMetrics {
   taskCompleted: boolean;
   agentOutput: string;
   events: AgentEvent[];
+  workDir: string;
 }
 
 export interface AgentEvent {

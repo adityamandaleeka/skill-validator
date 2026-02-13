@@ -172,11 +172,13 @@ export async function run(config: ValidatorConfig): Promise<number> {
             model: config.model,
             verbose: config.verbose,
             timeout: config.judgeTimeout,
+            workDir: baselineMetrics.workDir,
           }),
           judgeRun(scenario, withSkillMetrics, {
             model: config.model,
             verbose: config.verbose,
             timeout: config.judgeTimeout,
+            workDir: withSkillMetrics.workDir,
           }),
         ]);
 
@@ -236,6 +238,7 @@ function averageResults(runs: RunResult[]): RunResult {
     taskCompleted: runs.some((r) => r.metrics.taskCompleted),
     agentOutput: runs[runs.length - 1].metrics.agentOutput,
     events: runs[runs.length - 1].metrics.events,
+    workDir: runs[runs.length - 1].metrics.workDir,
   };
 
   const avgJudge = {

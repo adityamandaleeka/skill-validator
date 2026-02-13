@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import type { JudgeResult, RubricScore, RunMetrics, EvalScenario } from "./types.js";
 import { getSharedClient } from "./runner.js";
 
@@ -5,6 +6,7 @@ export interface JudgeOptions {
   model: string;
   verbose: boolean;
   timeout: number;
+  workDir: string;
 }
 
 export async function judgeRun(
@@ -27,13 +29,21 @@ export async function judgeRun(
       infiniteSessions: { enabled: false },
       onPermissionRequest: async (req: Record<string, unknown>) => {
         const kind = req.kind as string;
-        if (kind === "read") {
-          if (options.verbose) {
-            const { kind: _, toolCallId, ...details } = req;
-            process.stderr.write(`      📖 Judge: read approved${Object.keys(details).length > 0 ? ` ${JSON.stringify(details)}` : ""}\n`);
+        const allowedKinds = ["read", "shell"];
+
+        if (allowedKinds.includes(kind)) {
+          const reqPath = (req.path ?? req.command ?? "") as string;
+          const resolved = reqPath ? resolve(options.workDir, reqPath) : "";
+          const inWorkDir = !reqPath || resolved.startsWith(resolve(options.workDir));
+
+          if (inWorkDir) {
+            if (options.verbose) {
+              process.stderr.write(`      ✅ Judge: ${kind} approved (${reqPath || "no path"})\n`);
+            }
+            return { kind: "approved" as const };
           }
-          return { kind: "approved" as const };
         }
+
         if (options.verbose) {
           const { kind: _, toolCallId, ...details } = req;
           const detailStr = Object.keys(details).length > 0
