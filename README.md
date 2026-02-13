@@ -1,6 +1,8 @@
 # skill-validator
 
-Validate that agent skills ([agentskills.io](https://agentskills.io/specification)) meaningfully improve agent performance. Runs an agent with and without each skill, compares metrics, and produces a pass/fail verdict.
+You've built a bunch of skills. But are they actually helping — or just adding noise?
+
+**skill-validator** finds out. It runs your agent with and without each skill, measures what changed, and tells you whether the skill is worth keeping.
 
 ## How it works
 
