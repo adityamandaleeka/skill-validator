@@ -25,9 +25,13 @@ export async function judgeRun(
         content: buildJudgeSystemPrompt(),
       },
       infiniteSessions: { enabled: false },
-      onPermissionRequest: async (req: { kind?: string; toolCallId?: string }) => {
+      onPermissionRequest: async (req: Record<string, unknown>) => {
         if (options.verbose) {
-          process.stderr.write(`      ⚠️  Judge: permission requested (kind=${req.kind ?? "unknown"}, toolCallId=${req.toolCallId ?? "none"}), denying\n`);
+          const { kind, toolCallId, ...details } = req;
+          const detailStr = Object.keys(details).length > 0
+            ? ` ${JSON.stringify(details)}`
+            : "";
+          process.stderr.write(`      ⚠️  Judge: permission requested (${kind}${detailStr}), denying\n`);
         }
         return { kind: "denied-by-rules" as const };
       },
