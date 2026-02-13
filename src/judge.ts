@@ -25,13 +25,30 @@ export async function judgeRun(
         content: buildJudgeSystemPrompt(),
       },
       infiniteSessions: { enabled: false },
+      onPermissionRequest: async (req: { tool?: string }) => {
+        if (options.verbose) {
+          process.stderr.write(`      ⚠️  Judge: permission requested for ${req.tool ?? "unknown"}, denying\n`);
+        }
+        return { kind: "denied" as const };
+      },
     });
 
     const userPrompt = buildJudgeUserPrompt(scenario, metrics, rubric);
+
+    const timeoutMs = options.timeout;
+    const timer = setTimeout(() => {
+      process.stderr.write(
+        `      ⏰ Judge timed out after ${timeoutMs / 1000}s. ` +
+        `Try --judge-timeout with a higher value, or check --verbose for stuck permission requests.\n`
+      );
+    }, timeoutMs);
+
     const response = await session.sendAndWait(
       { prompt: userPrompt },
-      options.timeout
+      timeoutMs
     );
+
+    clearTimeout(timer);
 
     await session.destroy();
 
