@@ -50,6 +50,18 @@ async function evaluateAssertion(
       };
     }
 
+    case "file_not_exists": {
+      const pattern = assertion.path || "";
+      const exists = await fileExistsGlob(pattern, workDir);
+      return {
+        assertion,
+        passed: !exists,
+        message: !exists
+          ? `No file matching '${pattern}' found (expected)`
+          : `File matching '${pattern}' found but should not exist`,
+      };
+    }
+
     case "output_contains": {
       const value = assertion.value || "";
       const contains = agentOutput
@@ -64,6 +76,20 @@ async function evaluateAssertion(
       };
     }
 
+    case "output_not_contains": {
+      const value = assertion.value || "";
+      const contains = agentOutput
+        .toLowerCase()
+        .includes(value.toLowerCase());
+      return {
+        assertion,
+        passed: !contains,
+        message: !contains
+          ? `Output does not contain '${value}' (expected)`
+          : `Output contains '${value}' but should not`,
+      };
+    }
+
     case "output_matches": {
       const pattern = assertion.pattern || "";
       const regex = new RegExp(pattern, "i");
@@ -74,6 +100,19 @@ async function evaluateAssertion(
         message: matches
           ? `Output matches pattern '${pattern}'`
           : `Output does not match pattern '${pattern}'`,
+      };
+    }
+
+    case "output_not_matches": {
+      const pattern = assertion.pattern || "";
+      const regex = new RegExp(pattern, "i");
+      const matches = regex.test(agentOutput);
+      return {
+        assertion,
+        passed: !matches,
+        message: !matches
+          ? `Output does not match pattern '${pattern}' (expected)`
+          : `Output matches pattern '${pattern}' but should not`,
       };
     }
 

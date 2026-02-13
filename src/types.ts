@@ -33,8 +33,11 @@ export interface SetupFile {
 
 export type AssertionType =
   | "file_exists"
+  | "file_not_exists"
   | "output_contains"
+  | "output_not_contains"
   | "output_matches"
+  | "output_not_matches"
   | "exit_success";
 
 export interface Assertion {

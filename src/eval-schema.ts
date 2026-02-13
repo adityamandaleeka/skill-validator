@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 const assertionSchema = z.object({
-  type: z.enum(["file_exists", "output_contains", "output_matches", "exit_success"]),
+  type: z.enum(["file_exists", "file_not_exists", "output_contains", "output_not_contains", "output_matches", "output_not_matches", "exit_success"]),
   path: z.string().optional(),
   value: z.string().optional(),
   pattern: z.string().optional(),
