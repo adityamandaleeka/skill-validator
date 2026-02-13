@@ -10,7 +10,7 @@ import { DEFAULT_WEIGHTS as WEIGHTS } from "./types.js";
 
 function computeReduction(baseline: number, withSkill: number): number {
   if (baseline === 0) return withSkill === 0 ? 0 : -1;
-  return (baseline - withSkill) / baseline;
+  return Math.max(-1, Math.min(1, (baseline - withSkill) / baseline));
 }
 
 function averageRubricScore(result: RunResult): number {
@@ -22,10 +22,11 @@ function averageRubricScore(result: RunResult): number {
 function normalizeScoreImprovement(
   baseline: number,
   withSkill: number,
-  maxScore: number = 5
+  scale: number = 2.5
 ): number {
-  // Normalize score improvement to [-1, 1] range
-  return (withSkill - baseline) / maxScore;
+  // Normalize score improvement to [-1, 1] range using a tighter scale
+  // so that meaningful quality differences (e.g., 4→5) have real impact
+  return Math.max(-1, Math.min(1, (withSkill - baseline) / scale));
 }
 
 export function compareScenario(

@@ -214,7 +214,9 @@ function parseJudgeResponse(
   try {
     // Extract JSON from response (may be wrapped in markdown code block)
     const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) return fallbackJudgeResult(rubric);
+    if (!jsonMatch) {
+      throw new Error(`Judge response contained no JSON. Raw response:\n${content.slice(0, 500)}`);
+    }
 
     const parsed = JSON.parse(jsonMatch[0]);
     const rubricScores: RubricScore[] = (parsed.rubric_scores || []).map(
@@ -232,27 +234,7 @@ function parseJudgeResponse(
       ) / 10,
       overallReasoning: parsed.overall_reasoning || "",
     };
-  } catch {
-    return fallbackJudgeResult(rubric);
+  } catch (error) {
+    throw new Error(`Judge response parsing failed: ${error}`);
   }
-}
-
-function fallbackJudgeResult(rubric: string[]): JudgeResult {
-  const criteria =
-    rubric.length > 0
-      ? rubric
-      : [
-          "The agent completed the requested task correctly",
-          "The output is clear and well-structured",
-        ];
-
-  return {
-    rubricScores: criteria.map((c) => ({
-      criterion: c,
-      score: 3,
-      reasoning: "Judge unavailable, using neutral score",
-    })),
-    overallScore: 3,
-    overallReasoning: "Judge unavailable, using neutral score",
-  };
 }

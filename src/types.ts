@@ -135,11 +135,11 @@ export interface ReporterSpec {
 }
 
 export const DEFAULT_WEIGHTS: Record<keyof MetricBreakdown, number> = {
-  tokenReduction: 0.1,
-  toolCallReduction: 0.1,
-  taskCompletionImprovement: 0.2,
-  timeReduction: 0.05,
-  qualityImprovement: 0.3,
-  overallJudgmentImprovement: 0.15,
-  errorReduction: 0.1,
+  tokenReduction: 0.05,
+  toolCallReduction: 0.025,
+  taskCompletionImprovement: 0.15,
+  timeReduction: 0.025,
+  qualityImprovement: 0.40,
+  overallJudgmentImprovement: 0.30,
+  errorReduction: 0.05,
 };
