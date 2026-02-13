@@ -50,6 +50,7 @@ export async function getSharedClient(verbose: boolean): Promise<any> {
   _sharedClient = new _CopilotClient({
     logLevel: verbose ? "info" : "none",
   });
+  await _sharedClient.start();
   return _sharedClient;
 }
 
