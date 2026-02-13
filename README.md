@@ -1,8 +1,10 @@
 # skill-validator
 
-You've built a bunch of skills. But are they actually helping — or just adding noise?
+You've built a bunch of skills. But are they actually helping or just adding noise?
 
 **skill-validator** finds out. It runs your agent with and without each skill, measures what changed, and tells you whether the skill is worth keeping.
+
+Plugging into your CI, it ensures every new skill adds real value, and existing skills that stop helping when a new model comes out can be removed.
 
 ## How it works
 
