@@ -9,81 +9,101 @@ export interface JudgeOptions {
   workDir: string;
 }
 
+const MAX_JUDGE_RETRIES = 2;
+
 export async function judgeRun(
   scenario: EvalScenario,
   metrics: RunMetrics,
   options: JudgeOptions
 ): Promise<JudgeResult> {
   const rubric = scenario.rubric || [];
+  let lastError: Error | undefined;
 
-  try {
-    const client = await getSharedClient(options.verbose);
-
-    const session = await client.createSession({
-      model: options.model,
-      streaming: true,
-      systemMessage: {
-        mode: "replace",
-        content: buildJudgeSystemPrompt(),
-      },
-      infiniteSessions: { enabled: false },
-      onPermissionRequest: async (req: Record<string, unknown>) => {
-        const kind = req.kind as string;
-        const allowedKinds = ["read", "shell"];
-
-        if (allowedKinds.includes(kind)) {
-          const reqPath = (req.path ?? req.command ?? "") as string;
-          const resolved = reqPath ? resolve(options.workDir, reqPath) : "";
-          const inWorkDir = !reqPath || resolved.startsWith(resolve(options.workDir));
-
-          if (inWorkDir) {
-            if (options.verbose) {
-              process.stderr.write(`      ✅ Judge: ${kind} approved (${reqPath || "no path"})\n`);
-            }
-            return { kind: "approved" as const };
-          }
-        }
-
-        if (options.verbose) {
-          const { kind: _, toolCallId, ...details } = req;
-          const detailStr = Object.keys(details).length > 0
-            ? ` ${JSON.stringify(details)}`
-            : "";
-          process.stderr.write(`      ⚠️  Judge: ${kind} denied${detailStr}\n`);
-        }
-        return { kind: "denied-by-rules" as const };
-      },
-    });
-
-    const userPrompt = buildJudgeUserPrompt(scenario, metrics, rubric);
-
-    const timeoutMs = options.timeout;
-    const timer = setTimeout(() => {
-      process.stderr.write(
-        `      ⏰ Judge timed out after ${timeoutMs / 1000}s. ` +
-        `Try --judge-timeout with a higher value, or check --verbose for stuck permission requests.\n`
-      );
-    }, timeoutMs);
-
-    const response = await session.sendAndWait(
-      { prompt: userPrompt },
-      timeoutMs
-    );
-
-    clearTimeout(timer);
-
-    await session.destroy();
-
-    if (response?.data?.content) {
-      return parseJudgeResponse(String(response.data.content), rubric);
+  for (let attempt = 0; attempt <= MAX_JUDGE_RETRIES; attempt++) {
+    try {
+      if (attempt > 0) {
+        process.stderr.write(`      🔄 Judge retry ${attempt}/${MAX_JUDGE_RETRIES} for "${scenario.name}"\n`);
+      }
+      return await judgeRunOnce(scenario, metrics, rubric, options);
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      process.stderr.write(`      ⚠️  Judge attempt ${attempt + 1} failed: ${lastError.message.slice(0, 200)}\n`);
     }
-
-    throw new Error(
-      `Judge returned no content (response: ${JSON.stringify(response?.data ?? null)})`
-    );
-  } catch (error) {
-    throw new Error(`Judge failed for "${scenario.name}": ${error}`);
   }
+
+  throw new Error(`Judge failed for "${scenario.name}" after ${MAX_JUDGE_RETRIES + 1} attempts: ${lastError}`);
+}
+
+async function judgeRunOnce(
+  scenario: EvalScenario,
+  metrics: RunMetrics,
+  rubric: string[],
+  options: JudgeOptions
+): Promise<JudgeResult> {
+  const client = await getSharedClient(options.verbose);
+
+  const session = await client.createSession({
+    model: options.model,
+    streaming: true,
+    systemMessage: {
+      mode: "replace",
+      content: buildJudgeSystemPrompt(),
+    },
+    infiniteSessions: { enabled: false },
+    onPermissionRequest: async (req: Record<string, unknown>) => {
+      const kind = req.kind as string;
+      const allowedKinds = ["read", "shell"];
+
+      if (allowedKinds.includes(kind)) {
+        const reqPath = (req.path ?? req.command ?? "") as string;
+        const resolved = reqPath ? resolve(options.workDir, reqPath) : "";
+        const inWorkDir = !reqPath || resolved.startsWith(resolve(options.workDir));
+
+        if (inWorkDir) {
+          if (options.verbose) {
+            process.stderr.write(`      ✅ Judge: ${kind} approved (${reqPath || "no path"})\n`);
+          }
+          return { kind: "approved" as const };
+        }
+      }
+
+      if (options.verbose) {
+        const { kind: _, toolCallId, ...details } = req;
+        const detailStr = Object.keys(details).length > 0
+          ? ` ${JSON.stringify(details)}`
+          : "";
+        process.stderr.write(`      ⚠️  Judge: ${kind} denied${detailStr}\n`);
+      }
+      return { kind: "denied-by-rules" as const };
+    },
+  });
+
+  const userPrompt = buildJudgeUserPrompt(scenario, metrics, rubric);
+
+  const timeoutMs = options.timeout;
+  const timer = setTimeout(() => {
+    process.stderr.write(
+      `      ⏰ Judge timed out after ${timeoutMs / 1000}s. ` +
+      `Try --judge-timeout with a higher value, or check --verbose for stuck permission requests.\n`
+    );
+  }, timeoutMs);
+
+  const response = await session.sendAndWait(
+    { prompt: userPrompt },
+    timeoutMs
+  );
+
+  clearTimeout(timer);
+
+  await session.destroy();
+
+  if (response?.data?.content) {
+    return parseJudgeResponse(String(response.data.content), rubric);
+  }
+
+  throw new Error(
+    `Judge returned no content (response: ${JSON.stringify(response?.data ?? null)})`
+  );
 }
 
 function buildJudgeSystemPrompt(): string {
@@ -211,14 +231,16 @@ function parseJudgeResponse(
   content: string,
   rubric: string[]
 ): JudgeResult {
-  try {
-    // Extract JSON from response (may be wrapped in markdown code block)
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      throw new Error(`Judge response contained no JSON. Raw response:\n${content.slice(0, 500)}`);
-    }
+  // Try extracting JSON from markdown code block first, then fall back to brace matching
+  const codeBlockMatch = content.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+  const jsonStr = codeBlockMatch?.[1] ?? extractOutermostJson(content);
 
-    const parsed = JSON.parse(jsonMatch[0]);
+  if (!jsonStr) {
+    throw new Error(`Judge response contained no JSON. Raw response:\n${content.slice(0, 500)}`);
+  }
+
+  try {
+    const parsed = JSON.parse(jsonStr);
     const rubricScores: RubricScore[] = (parsed.rubric_scores || []).map(
       (s: { criterion: string; score: number; reasoning: string }) => ({
         criterion: s.criterion,
@@ -235,6 +257,27 @@ function parseJudgeResponse(
       overallReasoning: parsed.overall_reasoning || "",
     };
   } catch (error) {
-    throw new Error(`Judge response parsing failed: ${error}`);
+    throw new Error(`Judge response parsing failed: ${error}\nExtracted JSON:\n${jsonStr.slice(0, 500)}`);
   }
+}
+
+function extractOutermostJson(text: string): string | null {
+  const start = text.indexOf("{");
+  if (start === -1) return null;
+
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (escape) { escape = false; continue; }
+    if (ch === "\\") { escape = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (ch === "{") depth++;
+    if (ch === "}") { depth--; if (depth === 0) return text.slice(start, i + 1); }
+  }
+
+  return null;
 }
