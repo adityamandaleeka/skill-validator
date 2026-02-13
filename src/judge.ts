@@ -26,12 +26,20 @@ export async function judgeRun(
       },
       infiniteSessions: { enabled: false },
       onPermissionRequest: async (req: Record<string, unknown>) => {
+        const kind = req.kind as string;
+        if (kind === "read") {
+          if (options.verbose) {
+            const { kind: _, toolCallId, ...details } = req;
+            process.stderr.write(`      📖 Judge: read approved${Object.keys(details).length > 0 ? ` ${JSON.stringify(details)}` : ""}\n`);
+          }
+          return { kind: "approved" as const };
+        }
         if (options.verbose) {
-          const { kind, toolCallId, ...details } = req;
+          const { kind: _, toolCallId, ...details } = req;
           const detailStr = Object.keys(details).length > 0
             ? ` ${JSON.stringify(details)}`
             : "";
-          process.stderr.write(`      ⚠️  Judge: permission requested (${kind}${detailStr}), denying\n`);
+          process.stderr.write(`      ⚠️  Judge: ${kind} denied${detailStr}\n`);
         }
         return { kind: "denied-by-rules" as const };
       },
