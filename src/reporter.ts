@@ -25,16 +25,22 @@ export async function reportResults(
 
 export async function saveRunResults(
   verdicts: SkillVerdict[],
-  resultsDir: string
+  resultsDir: string,
+  model?: string
 ): Promise<string> {
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
   const runDir = join(resultsDir, `run-${timestamp}`);
   await mkdir(runDir, { recursive: true });
 
-  // Save full results JSON
+  // Save full results JSON with metadata
+  const output = {
+    model: model ?? "unknown",
+    timestamp: new Date().toISOString(),
+    verdicts,
+  };
   await writeFile(
     join(runDir, "results.json"),
-    JSON.stringify(verdicts, null, 2),
+    JSON.stringify(output, null, 2),
     "utf-8"
   );
 

@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import chalk from "chalk";
 import { discoverSkills } from "./discovery.js";
-import { runAgent, stopSharedClient } from "./runner.js";
+import { runAgent, stopSharedClient, getSharedClient } from "./runner.js";
 import { evaluateAssertions } from "./assertions.js";
 import { judgeRun } from "./judge.js";
 import { compareScenario, computeVerdict } from "./comparator.js";
@@ -82,6 +82,24 @@ export function createProgram(): Command {
 }
 
 export async function run(config: ValidatorConfig): Promise<number> {
+  // Validate model early
+  try {
+    const client = await getSharedClient(config.verbose);
+    const models = await client.listModels();
+    const modelIds = models.map((m: { id: string }) => m.id);
+    if (!modelIds.includes(config.model)) {
+      console.error(
+        `Invalid model: "${config.model}"\n` +
+        `Available models: ${modelIds.join(", ")}`
+      );
+      return 1;
+    }
+    console.log(`Using model: ${config.model}`);
+  } catch (error) {
+    console.error(`Failed to validate model: ${error}`);
+    return 1;
+  }
+
   // Discover skills
   const allSkills = (
     await Promise.all(config.skillPaths.map(discoverSkills))
@@ -216,7 +234,7 @@ export async function run(config: ValidatorConfig): Promise<number> {
   await reportResults(verdicts, config.reporters, config.verbose);
 
   if (config.saveResults) {
-    const runDir = await saveRunResults(verdicts, config.resultsDir);
+    const runDir = await saveRunResults(verdicts, config.resultsDir, config.model);
     console.log(chalk.dim(`Run results saved to ${runDir}`));
   }
 
