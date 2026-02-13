@@ -7,6 +7,7 @@ export interface JudgeOptions {
   verbose: boolean;
   timeout: number;
   workDir: string;
+  skillPath?: string;
 }
 
 const MAX_JUDGE_RETRIES = 2;
@@ -51,30 +52,7 @@ async function judgeRunOnce(
     },
     infiniteSessions: { enabled: false },
     onPermissionRequest: async (req: Record<string, unknown>) => {
-      const kind = req.kind as string;
-      const allowedKinds = ["read", "shell"];
-
-      if (allowedKinds.includes(kind)) {
-        const reqPath = (req.path ?? req.command ?? "") as string;
-        const resolved = reqPath ? resolve(options.workDir, reqPath) : "";
-        const inWorkDir = !reqPath || resolved.startsWith(resolve(options.workDir));
-
-        if (inWorkDir) {
-          if (options.verbose) {
-            process.stderr.write(`      ✅ Judge: ${kind} approved (${reqPath || "no path"})\n`);
-          }
-          return { kind: "approved" as const };
-        }
-      }
-
-      if (options.verbose) {
-        const { kind: _, toolCallId, ...details } = req;
-        const detailStr = Object.keys(details).length > 0
-          ? ` ${JSON.stringify(details)}`
-          : "";
-        process.stderr.write(`      ⚠️  Judge: ${kind} denied${detailStr}\n`);
-      }
-      return { kind: "denied-by-rules" as const };
+      return checkJudgePermission(req, options.workDir, options.skillPath);
     },
   });
 
@@ -280,4 +258,23 @@ function extractOutermostJson(text: string): string | null {
   }
 
   return null;
+}
+
+export function checkJudgePermission(
+  req: Record<string, unknown>,
+  workDir: string,
+  skillPath?: string
+): { kind: "approved" } | { kind: "denied-by-rules" } {
+  const reqPath = String(req.path ?? req.command ?? "");
+  if (!reqPath) return { kind: "approved" };
+
+  const resolved = resolve(reqPath);
+  const allowedDirs = [resolve(workDir)];
+  if (skillPath) allowedDirs.push(resolve(skillPath));
+
+  if (allowedDirs.some((dir) => resolved.startsWith(dir))) {
+    return { kind: "approved" };
+  }
+
+  return { kind: "denied-by-rules" };
 }

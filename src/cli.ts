@@ -173,12 +173,14 @@ export async function run(config: ValidatorConfig): Promise<number> {
             verbose: config.verbose,
             timeout: config.judgeTimeout,
             workDir: baselineMetrics.workDir,
+            skillPath: skill.path,
           }),
           judgeRun(scenario, withSkillMetrics, {
             model: config.model,
             verbose: config.verbose,
             timeout: config.judgeTimeout,
             workDir: withSkillMetrics.workDir,
+            skillPath: skill.path,
           }),
         ]);
 
