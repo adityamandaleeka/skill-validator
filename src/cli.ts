@@ -14,6 +14,50 @@ import type {
   ScenarioComparison,
 } from "./types.js";
 
+const isInteractive = process.stdout.isTTY && !process.env.CI;
+
+const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+
+class Spinner {
+  private interval: ReturnType<typeof setInterval> | null = null;
+  private frame = 0;
+  private message = "";
+
+  start(message: string): void {
+    this.message = message;
+    if (!isInteractive) {
+      process.stderr.write(`${message}\n`);
+      return;
+    }
+    this.frame = 0;
+    this.interval = setInterval(() => {
+      const f = SPINNER_FRAMES[this.frame % SPINNER_FRAMES.length];
+      process.stderr.write(`\r${chalk.cyan(f)} ${this.message}`);
+      this.frame++;
+    }, 80);
+  }
+
+  update(message: string): void {
+    this.message = message;
+    if (!isInteractive) {
+      process.stderr.write(`${message}\n`);
+    }
+  }
+
+  stop(finalMessage?: string): void {
+    if (this.interval) {
+      clearInterval(this.interval);
+      this.interval = null;
+    }
+    if (isInteractive) {
+      process.stderr.write(`\r${" ".repeat(this.message.length + 4)}\r`);
+    }
+    if (finalMessage) {
+      process.stderr.write(`${finalMessage}\n`);
+    }
+  }
+}
+
 function parseReporter(value: string): ReporterSpec {
   const [type, outputPath] = value.split(":");
   if (type !== "console" && type !== "json" && type !== "junit") {
@@ -140,6 +184,7 @@ export async function run(config: ValidatorConfig): Promise<number> {
 
     console.log(`🔍 Evaluating ${skill.name}...`);
     const comparisons: ScenarioComparison[] = [];
+    const spinner = new Spinner();
 
     for (const scenario of skill.evalConfig.scenarios) {
       console.log(`   📋 Scenario: ${scenario.name}`);
@@ -149,9 +194,8 @@ export async function run(config: ValidatorConfig): Promise<number> {
       const withSkillRuns: RunResult[] = [];
 
       for (let i = 0; i < config.runs; i++) {
-        if (config.verbose) {
-          console.log(`      Run ${i + 1}/${config.runs}...`);
-        }
+        const runLabel = `Run ${i + 1}/${config.runs}`;
+        spinner.start(`      ${runLabel}: running agents...`);
 
         // Run baseline and with-skill in parallel
         const [baselineMetrics, withSkillMetrics] = await Promise.all([
@@ -192,6 +236,7 @@ export async function run(config: ValidatorConfig): Promise<number> {
         }
 
         // Judge both runs in parallel
+        spinner.update(`      ${runLabel}: judging...`);
         const [baselineJudge, withSkillJudge] = await Promise.all([
           judgeRun(scenario, baselineMetrics, {
             model: config.judgeModel,
@@ -218,6 +263,7 @@ export async function run(config: ValidatorConfig): Promise<number> {
           metrics: withSkillMetrics,
           judgeResult: withSkillJudge,
         });
+        spinner.stop(`      ✓ ${runLabel} complete`);
       }
 
       // Average results across runs
