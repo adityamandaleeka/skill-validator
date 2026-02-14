@@ -177,14 +177,23 @@ function reportScenarioDetail(
   // Full judge output
   console.log();
 
+  const bj = scenario.baseline.judgeResult;
+  const sj = scenario.withSkill.judgeResult;
+  const scoreDelta = sj.overallScore - bj.overallScore;
+  const deltaStr = scoreDelta > 0 ? chalk.green(`+${scoreDelta.toFixed(1)}`) :
+    scoreDelta < 0 ? chalk.red(scoreDelta.toFixed(1)) : chalk.dim("±0");
+
+  console.log(`      ${chalk.bold("Overall:")} ${bj.overallScore.toFixed(1)} → ${sj.overallScore.toFixed(1)} (${deltaStr})`);
+  console.log();
+
   // Baseline judge
-  console.log(`      ${chalk.cyan("─── Baseline Judge")} ${chalk.cyan.bold(`${scenario.baseline.judgeResult.overallScore.toFixed(1)}/5`)} ${chalk.cyan("───")}`);
-  console.log(`      ${chalk.dim(wrapText(scenario.baseline.judgeResult.overallReasoning, 6))}`);
-  if (scenario.baseline.judgeResult.rubricScores.length > 0) {
+  console.log(`      ${chalk.cyan("─── Baseline Judge")} ${chalk.cyan.bold(`${bj.overallScore.toFixed(1)}/5`)} ${chalk.cyan("───")}`);
+  console.log(`      ${chalk.dim(wrapText(bj.overallReasoning, 6))}`);
+  if (bj.rubricScores.length > 0) {
     console.log();
-    for (const rs of scenario.baseline.judgeResult.rubricScores) {
+    for (const rs of bj.rubricScores) {
       const scoreColor = rs.score >= 4 ? chalk.green : rs.score >= 3 ? chalk.yellow : chalk.red;
-      console.log(`        ${scoreColor.bold(`${rs.score}/5`)}  ${chalk.white.bold(rs.criterion)}`);
+      console.log(`        ${scoreColor.bold(`${rs.score}/5`)}  ${chalk.white.bold(wrapText(rs.criterion, 14))}`);
       if (rs.reasoning) {
         console.log(`              ${chalk.dim(wrapText(rs.reasoning, 14))}`);
       }
@@ -194,13 +203,20 @@ function reportScenarioDetail(
   console.log();
 
   // With-skill judge
-  console.log(`      ${chalk.magenta("─── With-Skill Judge")} ${chalk.magenta.bold(`${scenario.withSkill.judgeResult.overallScore.toFixed(1)}/5`)} ${chalk.magenta("───")}`);
-  console.log(`      ${chalk.dim(wrapText(scenario.withSkill.judgeResult.overallReasoning, 6))}`);
-  if (scenario.withSkill.judgeResult.rubricScores.length > 0) {
+  console.log(`      ${chalk.magenta("─── With-Skill Judge")} ${chalk.magenta.bold(`${sj.overallScore.toFixed(1)}/5`)} ${chalk.magenta("───")}`);
+  console.log(`      ${chalk.dim(wrapText(sj.overallReasoning, 6))}`);
+  if (sj.rubricScores.length > 0) {
     console.log();
-    for (const rs of scenario.withSkill.judgeResult.rubricScores) {
+    for (const rs of sj.rubricScores) {
       const scoreColor = rs.score >= 4 ? chalk.green : rs.score >= 3 ? chalk.yellow : chalk.red;
-      console.log(`        ${scoreColor.bold(`${rs.score}/5`)}  ${chalk.white.bold(rs.criterion)}`);
+      // Find matching baseline rubric score
+      const baselineRs = bj.rubricScores.find(
+        (b) => b.criterion.toLowerCase() === rs.criterion.toLowerCase()
+      );
+      const comparison = baselineRs
+        ? chalk.dim(` (was ${baselineRs.score}/5)`)
+        : "";
+      console.log(`        ${scoreColor.bold(`${rs.score}/5`)}${comparison}  ${chalk.white.bold(wrapText(rs.criterion, 14))}`);
       if (rs.reasoning) {
         console.log(`              ${chalk.dim(wrapText(rs.reasoning, 14))}`);
       }
