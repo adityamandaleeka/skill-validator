@@ -176,17 +176,37 @@ function reportScenarioDetail(
 
   // Full judge output
   console.log();
-  console.log(`      ${chalk.cyan.bold("Baseline judge")} (${scenario.baseline.judgeResult.overallScore.toFixed(1)}/5):`);
-  console.log(`      ${wrapText(scenario.baseline.judgeResult.overallReasoning, 6)}`);
-  for (const rs of scenario.baseline.judgeResult.rubricScores) {
-    console.log(`        ${chalk.dim("•")} ${rs.criterion}: ${chalk.bold(String(rs.score))}/5 — ${rs.reasoning}`);
+
+  // Baseline judge
+  console.log(`      ${chalk.cyan("─── Baseline Judge")} ${chalk.cyan.bold(`${scenario.baseline.judgeResult.overallScore.toFixed(1)}/5`)} ${chalk.cyan("───")}`);
+  console.log(`      ${chalk.dim(wrapText(scenario.baseline.judgeResult.overallReasoning, 6))}`);
+  if (scenario.baseline.judgeResult.rubricScores.length > 0) {
+    console.log();
+    for (const rs of scenario.baseline.judgeResult.rubricScores) {
+      const scoreColor = rs.score >= 4 ? chalk.green : rs.score >= 3 ? chalk.yellow : chalk.red;
+      console.log(`        ${scoreColor.bold(`${rs.score}/5`)}  ${chalk.white.bold(rs.criterion)}`);
+      if (rs.reasoning) {
+        console.log(`              ${chalk.dim(wrapText(rs.reasoning, 14))}`);
+      }
+    }
   }
 
-  console.log(`      ${chalk.cyan.bold("With-skill judge")} (${scenario.withSkill.judgeResult.overallScore.toFixed(1)}/5):`);
-  console.log(`      ${wrapText(scenario.withSkill.judgeResult.overallReasoning, 6)}`);
-  for (const rs of scenario.withSkill.judgeResult.rubricScores) {
-    console.log(`        ${chalk.dim("•")} ${rs.criterion}: ${chalk.bold(String(rs.score))}/5 — ${rs.reasoning}`);
+  console.log();
+
+  // With-skill judge
+  console.log(`      ${chalk.magenta("─── With-Skill Judge")} ${chalk.magenta.bold(`${scenario.withSkill.judgeResult.overallScore.toFixed(1)}/5`)} ${chalk.magenta("───")}`);
+  console.log(`      ${chalk.dim(wrapText(scenario.withSkill.judgeResult.overallReasoning, 6))}`);
+  if (scenario.withSkill.judgeResult.rubricScores.length > 0) {
+    console.log();
+    for (const rs of scenario.withSkill.judgeResult.rubricScores) {
+      const scoreColor = rs.score >= 4 ? chalk.green : rs.score >= 3 ? chalk.yellow : chalk.red;
+      console.log(`        ${scoreColor.bold(`${rs.score}/5`)}  ${chalk.white.bold(rs.criterion)}`);
+      if (rs.reasoning) {
+        console.log(`              ${chalk.dim(wrapText(rs.reasoning, 14))}`);
+      }
+    }
   }
+  console.log();
 
   if (verbose) {
     console.log();
