@@ -12,8 +12,9 @@ Plugging into your CI, it ensures every new skill adds real value, and existing 
 2. Reads evaluation scenarios from each skill's `tests/eval.yaml`
 3. For each scenario, runs the agent **without** the skill (baseline) and **with** the skill
 4. Collects metrics: token usage, tool calls, time, errors, task completion
-5. Uses LLM-as-judge to score output quality (rubric + holistic assessment)
+5. Uses LLM-as-judge to score output quality (rubric + holistic assessment, with full session timeline)
 6. Compares results and produces a verdict: does the skill actually help?
+7. Saves detailed results (JSON + markdown) to `.skill-validator-results/`
 
 ## Prerequisites
 
@@ -43,12 +44,21 @@ skill-validator --verbose ./skills/
 # Custom model and threshold
 skill-validator --model claude-sonnet-4.5 --min-improvement 0.2 ./skills/
 
+# Use a different model for judging vs agent runs
+skill-validator --model gpt-5.3-codex --judge-model claude-opus-4.6-fast ./skills/
+
+# Multiple runs for stability
+skill-validator --runs 5 ./skills/
+
 # Output as JSON or JUnit XML
 skill-validator --reporter json:results.json ./skills/
 skill-validator --reporter junit:results.xml ./skills/
 
 # Strict mode (require all skills to have evals)
 skill-validator --strict ./skills/
+
+# Custom results directory
+skill-validator --results-dir ./my-results ./skills/
 ```
 
 ## Writing eval files
@@ -68,10 +78,16 @@ scenarios:
     assertions:
       - type: "output_contains"
         value: "expected text"
+      - type: "output_not_contains"
+        value: "text that should not appear"
       - type: "output_matches"
         pattern: "regex pattern"
+      - type: "output_not_matches"
+        pattern: "regex that should not match"
       - type: "file_exists"
         path: "*.csv"
+      - type: "file_not_exists"
+        path: "*.csproj"
       - type: "exit_success"
     rubric:
       - "The output is well-formatted and clear"
@@ -84,27 +100,32 @@ scenarios:
 | Type | Description |
 |------|-------------|
 | `output_contains` | Agent output contains `value` (case-insensitive) |
+| `output_not_contains` | Agent output does NOT contain `value` |
 | `output_matches` | Agent output matches `pattern` (regex) |
+| `output_not_matches` | Agent output does NOT match `pattern` |
 | `file_exists` | File matching `path` glob exists in work dir |
+| `file_not_exists` | No file matching `path` glob exists in work dir |
 | `exit_success` | Agent produced non-empty output |
 
 ### Rubric
 
-Rubric items are scored 1–5 by an LLM judge. The judge also provides a holistic quality score. These are the strongest signals in the improvement score (0.45 combined weight).
+Rubric items are scored 1–5 by an LLM judge. The judge sees the full session timeline (tool calls, errors, agent reasoning) — not just the final output. Quality metrics have the highest weight (0.70 combined) in the improvement score.
 
 ## Metrics & scoring
 
-The improvement score is a weighted sum:
+The improvement score is a weighted sum. Quality is heavily prioritized — a skill that improves output quality will pass even if it uses more tokens:
 
 | Metric | Weight | What it measures |
 |--------|--------|------------------|
-| Token reduction | 0.10 | Fewer tokens = more efficient |
-| Tool call reduction | 0.10 | Fewer tool calls = more efficient |
-| Task completion | 0.20 | Did hard assertions pass? |
-| Time reduction | 0.05 | Faster completion |
-| Quality (rubric) | 0.30 | LLM judge rubric scores |
-| Quality (overall) | 0.15 | LLM judge holistic assessment |
-| Error reduction | 0.10 | Fewer errors/retries |
+| Quality (rubric) | 0.40 | LLM judge rubric scores |
+| Quality (overall) | 0.30 | LLM judge holistic assessment |
+| Task completion | 0.15 | Did hard assertions pass? |
+| Token reduction | 0.05 | Fewer tokens = more efficient |
+| Error reduction | 0.05 | Fewer errors/retries |
+| Tool call reduction | 0.025 | Fewer tool calls = more efficient |
+| Time reduction | 0.025 | Faster completion |
+
+All efficiency metrics are clamped to [-1, 1] so extreme changes can't overwhelm quality gains.
 
 A skill **passes** if its average improvement score across scenarios meets the threshold (default 10%).
 
@@ -112,15 +133,27 @@ A skill **passes** if its average improvement score across scenarios meets the t
 
 | Flag | Default | Description |
 |------|---------|-------------|
+| `--model <name>` | `claude-opus-4.6` | Model for agent runs |
+| `--judge-model <name>` | same as `--model` | Model for LLM judge (can be different) |
 | `--min-improvement <n>` | `0.1` | Minimum improvement score (0–1) |
+| `--runs <n>` | `3` | Runs per scenario (averaged for stability) |
+| `--judge-timeout <n>` | `120` | Judge LLM timeout in seconds |
 | `--require-completion` | `true` | Fail if skill regresses task completion |
 | `--require-evals` | `false` | Fail if skill has no tests/eval.yaml |
 | `--strict` | `false` | Enable --require-evals and strict checking |
-| `--verbose` | `false` | Show per-scenario metric breakdowns |
-| `--model <name>` | `gpt-4.1` | Model for agent runs and judging |
-| `--runs <n>` | `3` | Runs per scenario (averaged for stability) |
-| `--judge-timeout <n>` | `120` | Judge LLM timeout in seconds |
+| `--verbose` | `false` | Show tool calls and agent events during runs |
 | `--reporter <spec>` | `console` | Output format: `console`, `json:path`, `junit:path` |
+| `--results-dir <path>` | `.skill-validator-results` | Directory for saved run results |
+| `--no-save-results` | | Disable saving run results to disk |
+
+Models are validated on startup — invalid model names fail fast with a list of available models.
+
+## Output
+
+Results are displayed in the console with color-coded scores and metric deltas. Run results are also auto-saved to `.skill-validator-results/run-{timestamp}/` containing:
+
+- `results.json` — full results with model, timestamp, and all verdicts
+- Per-skill directories with `verdict.json` and per-scenario markdown files
 
 ## CI integration
 
