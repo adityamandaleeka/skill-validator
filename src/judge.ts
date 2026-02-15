@@ -1,4 +1,5 @@
 import type { JudgeResult, RubricScore, RunMetrics, EvalScenario } from "./types.js";
+import type { PermissionRequest } from "@github/copilot-sdk";
 import { getSharedClient, checkPermission } from "./runner.js";
 
 export interface JudgeOptions {
@@ -51,7 +52,7 @@ async function judgeRunOnce(
       content: buildJudgeSystemPrompt(),
     },
     infiniteSessions: { enabled: false },
-    onPermissionRequest: async (req: Record<string, unknown>) => {
+    onPermissionRequest: async (req: PermissionRequest) => {
       return checkPermission(req, options.workDir, options.skillPath);
     },
   });

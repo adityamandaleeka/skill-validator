@@ -13,6 +13,7 @@ import type {
   RunResult,
   ScenarioComparison,
 } from "./types.js";
+import type { ModelInfo } from "@github/copilot-sdk";
 
 const isInteractive = process.stdout.isTTY && !process.env.CI;
 
@@ -151,8 +152,8 @@ export async function run(config: ValidatorConfig): Promise<number> {
   // Validate model early
   try {
     const client = await getSharedClient(config.verbose);
-    const models = await client.listModels();
-    const modelIds = models.map((m: { id: string }) => m.id);
+    const models: ModelInfo[] = await client.listModels();
+    const modelIds = models.map((m) => m.id);
     const modelsToValidate = [config.model];
     if (config.judgeModel !== config.model) modelsToValidate.push(config.judgeModel);
     for (const m of modelsToValidate) {

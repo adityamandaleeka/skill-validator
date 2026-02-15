@@ -2,6 +2,14 @@ import { mkdtemp, cp, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, dirname, resolve, sep } from "node:path";
 import type {
+  CopilotClient,
+  CopilotClientOptions,
+  SessionConfig,
+  SessionEvent,
+  PermissionRequest,
+  PermissionRequestResult,
+} from "@github/copilot-sdk";
+import type {
   EvalScenario,
   RunMetrics,
   AgentEvent,
@@ -15,7 +23,7 @@ export interface RunOptions {
   model: string;
   verbose: boolean;
   log?: (message: string) => void;
-  client?: unknown;
+  client?: CopilotClient;
 }
 
 async function setupWorkDir(
@@ -41,16 +49,15 @@ async function setupWorkDir(
   return workDir;
 }
 
-let _sharedClient: any = null;
-let _CopilotClient: any = null;
+let _sharedClient: CopilotClient | null = null;
 
-export async function getSharedClient(verbose: boolean): Promise<any> {
+export async function getSharedClient(verbose: boolean): Promise<CopilotClient> {
   if (_sharedClient) return _sharedClient;
   const mod = await import("@github/copilot-sdk");
-  _CopilotClient = mod.CopilotClient;
-  _sharedClient = new _CopilotClient({
+  const options: CopilotClientOptions = {
     logLevel: verbose ? "info" : "none",
-  });
+  };
+  _sharedClient = new mod.CopilotClient(options);
   await _sharedClient.start();
   return _sharedClient;
 }
@@ -63,10 +70,10 @@ export async function stopSharedClient(): Promise<void> {
 }
 
 export function checkPermission(
-  req: Record<string, unknown>,
+  req: PermissionRequest,
   workDir: string,
   skillPath?: string
-): { kind: "approved" } | { kind: "denied-by-rules" } {
+): PermissionRequestResult {
   const reqPath = String(req.path ?? req.command ?? "");
   if (!reqPath) return { kind: "approved" };
 
@@ -85,7 +92,7 @@ export function buildSessionConfig(
   skill: SkillInfo | null,
   model: string,
   workDir: string
-): Record<string, unknown> {
+): SessionConfig {
   const skillPath = skill ? dirname(skill.path) : undefined;
   return {
     model,
@@ -93,7 +100,7 @@ export function buildSessionConfig(
     workingDirectory: workDir,
     skillDirectories: skill ? [skillPath!] : [],
     infiniteSessions: { enabled: false },
-    onPermissionRequest: async (req: Record<string, unknown>) => {
+    onPermissionRequest: async (req: PermissionRequest) => {
       return checkPermission(req, workDir, skillPath);
     },
   };
@@ -119,11 +126,11 @@ export async function runAgent(options: RunOptions): Promise<RunMetrics> {
         reject(new Error(`Scenario timed out after ${scenario.timeout}s`));
       }, (scenario.timeout ?? 120) * 1000);
 
-      session.on((event: { type: string; data: Record<string, unknown> }) => {
+      session.on((event: SessionEvent) => {
         const agentEvent: AgentEvent = {
           type: event.type,
           timestamp: Date.now(),
-          data: event.data,
+          data: event.data as Record<string, unknown>,
         };
         events.push(agentEvent);
 
@@ -139,7 +146,7 @@ export async function runAgent(options: RunOptions): Promise<RunMetrics> {
           typeof event.data.content === "string" &&
           event.data.content !== ""
         ) {
-          agentOutput = String(event.data.content);
+          agentOutput = event.data.content;
         }
 
         if (verbose) {
