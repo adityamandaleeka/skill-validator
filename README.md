@@ -12,9 +12,10 @@ Plugging into your CI, it ensures every new skill adds real value, and existing 
 2. Reads evaluation scenarios from each skill's `tests/eval.yaml`
 3. For each scenario, runs the agent **without** the skill (baseline) and **with** the skill
 4. Collects metrics: token usage, tool calls, time, errors, task completion
-5. Uses LLM-as-judge to score output quality (rubric + holistic assessment, with full session timeline)
-6. Compares results and produces a verdict: does the skill actually help?
-7. Saves detailed results (JSON + markdown) to `.skill-validator-results/`
+5. Uses **pairwise comparative judging** — the LLM judge sees both outputs side-by-side and decides which is better (with position-swap bias mitigation)
+6. Computes **confidence intervals** via bootstrapping across multiple runs
+7. Compares results and produces a verdict with statistical significance
+8. Saves detailed results (JSON + markdown) to `.skill-validator-results/`
 
 ## Prerequisites
 
@@ -109,7 +110,9 @@ scenarios:
 
 ### Rubric
 
-Rubric items are scored 1–5 by an LLM judge. The judge sees the full session timeline (tool calls, errors, agent reasoning) — not just the final output. Quality metrics have the highest weight (0.70 combined) in the improvement score.
+Rubric items are evaluated by an LLM judge that sees both the baseline and skill-enhanced outputs side-by-side (pairwise mode). The judge determines which output is better per criterion and by how much. Position bias is mitigated by running the comparison twice with swapped order and checking consistency.
+
+In independent mode, rubric items are scored 1–5 per run. Quality metrics have the highest weight (0.70 combined) in the improvement score.
 
 ## Metrics & scoring
 
@@ -117,8 +120,8 @@ The improvement score is a weighted sum. Quality is heavily prioritized — a sk
 
 | Metric | Weight | What it measures |
 |--------|--------|------------------|
-| Quality (rubric) | 0.40 | LLM judge rubric scores |
-| Quality (overall) | 0.30 | LLM judge holistic assessment |
+| Quality (rubric) | 0.40 | Pairwise rubric comparison (or independent judge rubric scores) |
+| Quality (overall) | 0.30 | Pairwise overall comparison (or independent judge holistic assessment) |
 | Task completion | 0.15 | Did hard assertions pass? |
 | Token reduction | 0.05 | Fewer tokens = more efficient |
 | Error reduction | 0.05 | Fewer errors/retries |
@@ -129,14 +132,40 @@ All efficiency metrics are clamped to [-1, 1] so extreme changes can't overwhelm
 
 A skill **passes** if its average improvement score across scenarios meets the threshold (default 10%).
 
+### Pairwise judging
+
+By default (`--judge-mode pairwise`), the LLM judge sees both baseline and skill-enhanced outputs in a single prompt and makes a direct comparison. This is more reliable than independent scoring because:
+
+- LLMs are better at relative comparison than absolute scoring
+- Eliminates calibration drift between separate judge calls
+- Directly answers "is the skill-enhanced version better?"
+
+**Position-swap bias mitigation**: Each comparison is run twice — once with baseline first, once with skill first. If the judge picks the same winner in both orderings, the result is trusted. If it flips, the comparison defaults to a tie (flagged as inconsistent).
+
+### Statistical confidence
+
+Results include bootstrap confidence intervals computed across individual runs. The output shows:
+
+```
+✓ my-skill  +18.5%  [+8.2%, +28.8%] significant
+✗ other-skill  +6.3%  [-2.1%, +14.7%] not significant
+```
+
+- **significant**: the 95% CI doesn't cross zero — the improvement is real
+- **not significant**: the CI crosses zero — could be noise
+
+For reliable significance testing, use `--runs 5` or higher (a warning is shown for fewer runs).
+
 ## CLI flags
 
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--model <name>` | `claude-opus-4.6` | Model for agent runs |
 | `--judge-model <name>` | same as `--model` | Model for LLM judge (can be different) |
+| `--judge-mode <mode>` | `pairwise` | Judge mode: `pairwise`, `independent`, or `both` |
 | `--min-improvement <n>` | `0.1` | Minimum improvement score (0–1) |
 | `--runs <n>` | `3` | Runs per scenario (averaged for stability) |
+| `--confidence-level <n>` | `0.95` | Confidence level for statistical intervals (0–1) |
 | `--judge-timeout <n>` | `120` | Judge LLM timeout in seconds |
 | `--require-completion` | `true` | Fail if skill regresses task completion |
 | `--require-evals` | `false` | Fail if skill has no tests/eval.yaml |
