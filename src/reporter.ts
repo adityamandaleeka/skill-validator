@@ -112,7 +112,17 @@ function reportConsole(verdicts: SkillVerdict[], verbose: boolean): void {
     const name = chalk.bold(verdict.skillName);
     const score = formatScore(verdict.overallImprovementScore);
 
-    console.log(`${icon} ${name}  ${score}`);
+    // Build score line with optional CI
+    let scoreLine = `${icon} ${name}  ${score}`;
+    if (verdict.confidenceInterval) {
+      const ci = verdict.confidenceInterval;
+      const ciStr = `[${formatPct(ci.low)}, ${formatPct(ci.high)}]`;
+      const sigStr = verdict.isSignificant
+        ? chalk.green("significant")
+        : chalk.yellow("not significant");
+      scoreLine += `  ${chalk.dim(ciStr)} ${sigStr}`;
+    }
+    console.log(scoreLine);
     console.log(`  ${chalk.dim(verdict.reason)}`);
 
     if (verdict.scenarios.length > 0) {
@@ -224,6 +234,29 @@ function reportScenarioDetail(
   }
   console.log();
 
+  // Pairwise judge results
+  if (scenario.pairwiseResult) {
+    const pw = scenario.pairwiseResult;
+    const consistencyIcon = pw.positionSwapConsistent
+      ? chalk.green("✓ consistent")
+      : chalk.yellow("⚠ inconsistent");
+    const winnerColor = pw.overallWinner === "skill" ? chalk.green : pw.overallWinner === "baseline" ? chalk.red : chalk.dim;
+    console.log(`      ${chalk.bold("─── Pairwise Comparison")} ${consistencyIcon} ${chalk.bold("───")}`);
+    console.log(`      Winner: ${winnerColor(pw.overallWinner)} (${pw.overallMagnitude})`);
+    console.log(`      ${chalk.dim(wrapText(pw.overallReasoning, 6))}`);
+    if (pw.rubricResults.length > 0) {
+      console.log();
+      for (const pr of pw.rubricResults) {
+        const prColor = pr.winner === "skill" ? chalk.green : pr.winner === "baseline" ? chalk.red : chalk.dim;
+        console.log(`        ${prColor.bold(pr.winner.padEnd(8))} (${pr.magnitude})  ${chalk.white.bold(wrapText(pr.criterion, 14))}`);
+        if (pr.reasoning) {
+          console.log(`              ${chalk.dim(wrapText(pr.reasoning, 14))}`);
+        }
+      }
+    }
+    console.log();
+  }
+
   if (verbose) {
     console.log();
     console.log(`      ${chalk.dim("Baseline output:")}`);
@@ -281,6 +314,12 @@ function formatScore(score: number): string {
   if (score > 0) return chalk.green(`+${pct}`);
   if (score < 0) return chalk.red(pct);
   return chalk.dim(pct);
+}
+
+function formatPct(value: number): string {
+  const pct = (value * 100).toFixed(1) + "%";
+  if (value > 0) return `+${pct}`;
+  return pct;
 }
 
 function formatDelta(value: number): string {

@@ -4,6 +4,7 @@ import { discoverSkills } from "./discovery.js";
 import { runAgent, stopSharedClient, getSharedClient } from "./runner.js";
 import { evaluateAssertions } from "./assertions.js";
 import { judgeRun } from "./judge.js";
+import { pairwiseJudge } from "./pairwise-judge.js";
 import { compareScenario, computeVerdict } from "./comparator.js";
 import { reportResults, saveRunResults } from "./reporter.js";
 import type {
@@ -12,6 +13,8 @@ import type {
   SkillVerdict,
   RunResult,
   ScenarioComparison,
+  PairwiseJudgeResult,
+  JudgeMode,
 } from "./types.js";
 import type { ModelInfo } from "@github/copilot-sdk";
 
@@ -108,8 +111,10 @@ export function createProgram(): Command {
     .option("--verbose", "Show detailed per-scenario breakdowns", false)
     .option("--model <name>", "Model to use for agent runs", "claude-opus-4.6")
     .option("--judge-model <name>", "Model to use for judging (defaults to --model)")
+    .option("--judge-mode <mode>", "Judge mode: pairwise, independent, or both", "pairwise")
     .option("--runs <number>", "Number of runs per scenario for averaging", "3")
     .option("--judge-timeout <number>", "Judge timeout in seconds", "120")
+    .option("--confidence-level <number>", "Confidence level for statistical intervals (0-1)", "0.95")
     .option(
       "--results-dir <path>",
       "Directory to save run results",
@@ -168,7 +173,8 @@ export async function run(config: ValidatorConfig): Promise<number> {
       }
     }
     console.log(`Using model: ${config.model}` +
-      (config.judgeModel !== config.model ? `, judge: ${config.judgeModel}` : ""));
+      (config.judgeModel !== config.model ? `, judge: ${config.judgeModel}` : "") +
+      `, judge-mode: ${config.judgeMode}`);
   } catch (error) {
     console.error(`Failed to validate model: ${error}`);
     return 1;
@@ -186,7 +192,14 @@ export async function run(config: ValidatorConfig): Promise<number> {
 
   console.log(`Found ${allSkills.length} skill(s)\n`);
 
+  if (config.runs < 5) {
+    console.log(chalk.yellow(`⚠  Running with ${config.runs} run(s). For statistically significant results, use --runs 5 or higher.`));
+  }
+
   const verdicts: SkillVerdict[] = [];
+
+  const usePairwise = config.judgeMode === "pairwise" || config.judgeMode === "both";
+  const useIndependent = config.judgeMode === "independent" || config.judgeMode === "both";
 
   for (const skill of allSkills) {
     if (!skill.evalConfig) {
@@ -213,9 +226,10 @@ export async function run(config: ValidatorConfig): Promise<number> {
     for (const scenario of skill.evalConfig.scenarios) {
       console.log(`   📋 Scenario: ${scenario.name}`);
 
-      // Run N times and average, pipelining judge calls with next run
+      // Run N times, collecting per-run comparisons for CI
       const baselineRuns: RunResult[] = [];
       const withSkillRuns: RunResult[] = [];
+      const perRunPairwise: (PairwiseJudgeResult | undefined)[] = [];
       const pendingJudges: Promise<void>[] = [];
 
       for (let i = 0; i < config.runs; i++) {
@@ -262,34 +276,61 @@ export async function run(config: ValidatorConfig): Promise<number> {
           withSkillMetrics.taskCompleted = withSkillMetrics.errorCount === 0;
         }
 
-        // Fire off judge calls — they run concurrently with the next iteration's agent runs
+        const runIndex = i;
+
+        // Fire off judge calls concurrently with next iteration's agent runs
         const judgePromise = (async () => {
-          const [baselineJudge, withSkillJudge] = await Promise.all([
-            judgeRun(scenario, baselineMetrics, {
-              model: config.judgeModel,
-              verbose: config.verbose,
-              timeout: config.judgeTimeout,
-              workDir: baselineMetrics.workDir,
-              skillPath: skill.path,
-            }),
-            judgeRun(scenario, withSkillMetrics, {
-              model: config.judgeModel,
-              verbose: config.verbose,
-              timeout: config.judgeTimeout,
-              workDir: withSkillMetrics.workDir,
-              skillPath: skill.path,
-            }),
-          ]);
+          const judgeOpts = {
+            model: config.judgeModel,
+            verbose: config.verbose,
+            timeout: config.judgeTimeout,
+            workDir: baselineMetrics.workDir,
+            skillPath: skill.path,
+          };
+
+          // Independent judging (always needed for metrics display)
+          const [baselineJudge, withSkillJudge] = useIndependent || config.judgeMode === "pairwise"
+            ? await Promise.all([
+                judgeRun(scenario, baselineMetrics, judgeOpts),
+                judgeRun(scenario, withSkillMetrics, {
+                  ...judgeOpts,
+                  workDir: withSkillMetrics.workDir,
+                }),
+              ])
+            : await Promise.all([
+                judgeRun(scenario, baselineMetrics, judgeOpts),
+                judgeRun(scenario, withSkillMetrics, {
+                  ...judgeOpts,
+                  workDir: withSkillMetrics.workDir,
+                }),
+              ]);
 
           baselineRuns.push({
             metrics: baselineMetrics,
             judgeResult: baselineJudge,
           });
-
           withSkillRuns.push({
             metrics: withSkillMetrics,
             judgeResult: withSkillJudge,
           });
+
+          // Pairwise judging
+          if (usePairwise) {
+            try {
+              const pw = await pairwiseJudge(
+                scenario,
+                baselineMetrics,
+                withSkillMetrics,
+                judgeOpts
+              );
+              perRunPairwise[runIndex] = pw;
+            } catch (error) {
+              process.stderr.write(
+                `      ⚠️  Pairwise judge failed for run ${runIndex + 1}: ${error}\n`
+              );
+              perRunPairwise[runIndex] = undefined;
+            }
+          }
         })();
 
         pendingJudges.push(judgePromise);
@@ -301,20 +342,42 @@ export async function run(config: ValidatorConfig): Promise<number> {
       await Promise.all(pendingJudges);
       spinner.stop(`      ✓ All ${config.runs} run(s) judged`);
 
-      // Average results across runs
+      // Compute per-run comparisons for CI, then average for display
+      const perRunScores: number[] = [];
+      for (let i = 0; i < baselineRuns.length; i++) {
+        const runComparison = compareScenario(
+          scenario.name,
+          baselineRuns[i],
+          withSkillRuns[i],
+          perRunPairwise[i]
+        );
+        perRunScores.push(runComparison.improvementScore);
+      }
+
+      // Average results for the primary comparison
       const avgBaseline = averageResults(baselineRuns);
       const avgWithSkill = averageResults(withSkillRuns);
 
-      comparisons.push(
-        compareScenario(scenario.name, avgBaseline, avgWithSkill)
+      // Use the most common pairwise result (or first consistent one)
+      const bestPairwise = perRunPairwise.find((pw) => pw?.positionSwapConsistent) ?? perRunPairwise[0];
+
+      const comparison = compareScenario(
+        scenario.name,
+        avgBaseline,
+        avgWithSkill,
+        bestPairwise
       );
+      comparison.perRunScores = perRunScores;
+
+      comparisons.push(comparison);
     }
 
     const verdict = computeVerdict(
       skill,
       comparisons,
       config.minImprovement,
-      config.requireCompletion
+      config.requireCompletion,
+      config.confidenceLevel
     );
     verdicts.push(verdict);
   }

@@ -4,9 +4,16 @@ import type {
   MetricBreakdown,
   SkillVerdict,
   SkillInfo,
+  PairwiseJudgeResult,
+  ConfidenceInterval,
   DEFAULT_WEIGHTS,
 } from "./types.js";
 import { DEFAULT_WEIGHTS as WEIGHTS } from "./types.js";
+import { pairwiseToQualityScore } from "./pairwise-judge.js";
+import {
+  bootstrapConfidenceInterval,
+  isStatisticallySignificant,
+} from "./statistics.js";
 
 function computeReduction(baseline: number, withSkill: number): number {
   if (baseline === 0) return withSkill === 0 ? 0 : -1;
@@ -32,7 +39,8 @@ function normalizeScoreImprovement(
 export function compareScenario(
   scenarioName: string,
   baseline: RunResult,
-  withSkill: RunResult
+  withSkill: RunResult,
+  pairwiseResult?: PairwiseJudgeResult
 ): ScenarioComparison {
   const breakdown: MetricBreakdown = {
     tokenReduction: computeReduction(
@@ -67,6 +75,13 @@ export function compareScenario(
     ),
   };
 
+  // Override quality scores with pairwise results when available
+  if (pairwiseResult) {
+    const pairwiseScores = pairwiseToQualityScore(pairwiseResult);
+    breakdown.qualityImprovement = pairwiseScores.qualityImprovement;
+    breakdown.overallJudgmentImprovement = pairwiseScores.overallImprovement;
+  }
+
   let improvementScore = 0;
   for (const [key, weight] of Object.entries(WEIGHTS)) {
     const value = breakdown[key as keyof MetricBreakdown];
@@ -79,6 +94,7 @@ export function compareScenario(
     withSkill,
     improvementScore,
     breakdown,
+    pairwiseResult,
   };
 }
 
@@ -86,7 +102,8 @@ export function computeVerdict(
   skill: SkillInfo,
   comparisons: ScenarioComparison[],
   minImprovement: number,
-  requireCompletion: boolean
+  requireCompletion: boolean,
+  confidenceLevel: number = 0.95
 ): SkillVerdict {
   if (comparisons.length === 0) {
     return {
@@ -99,9 +116,15 @@ export function computeVerdict(
     };
   }
 
+  // Collect all per-run scores across scenarios for CI
+  const allPerRunScores = comparisons.flatMap((c) => c.perRunScores ?? [c.improvementScore]);
+
   const overallImprovementScore =
     comparisons.reduce((sum, c) => sum + c.improvementScore, 0) /
     comparisons.length;
+
+  const ci = bootstrapConfidenceInterval(allPerRunScores, confidenceLevel);
+  const significant = isStatisticallySignificant(ci);
 
   // Check for task completion regression
   if (requireCompletion) {
@@ -115,6 +138,8 @@ export function computeVerdict(
         passed: false,
         scenarios: comparisons,
         overallImprovementScore,
+        confidenceInterval: ci,
+        isSignificant: significant,
         reason: "Skill regressed on task completion in one or more scenarios",
       };
     }
@@ -122,14 +147,22 @@ export function computeVerdict(
 
   const passed = overallImprovementScore >= minImprovement;
 
+  let reason = passed
+    ? `Improvement score ${(overallImprovementScore * 100).toFixed(1)}% meets threshold of ${(minImprovement * 100).toFixed(1)}%`
+    : `Improvement score ${(overallImprovementScore * 100).toFixed(1)}% below threshold of ${(minImprovement * 100).toFixed(1)}%`;
+
+  if (!significant && allPerRunScores.length > 1) {
+    reason += ` (not statistically significant)`;
+  }
+
   return {
     skillName: skill.name,
     skillPath: skill.path,
     passed,
     scenarios: comparisons,
     overallImprovementScore,
-    reason: passed
-      ? `Improvement score ${(overallImprovementScore * 100).toFixed(1)}% meets threshold of ${(minImprovement * 100).toFixed(1)}%`
-      : `Improvement score ${(overallImprovementScore * 100).toFixed(1)}% below threshold of ${(minImprovement * 100).toFixed(1)}%`,
+    confidenceInterval: ci,
+    isSignificant: significant,
+    reason,
   };
 }
