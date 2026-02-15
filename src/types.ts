@@ -90,12 +90,48 @@ export interface RunResult {
   judgeResult: JudgeResult;
 }
 
+// --- Pairwise judging types ---
+
+export type PairwiseMagnitude =
+  | "much-better"
+  | "slightly-better"
+  | "equal"
+  | "slightly-worse"
+  | "much-worse";
+
+export interface PairwiseRubricResult {
+  criterion: string;
+  winner: "baseline" | "skill" | "tie";
+  magnitude: PairwiseMagnitude;
+  reasoning: string;
+}
+
+export interface PairwiseJudgeResult {
+  rubricResults: PairwiseRubricResult[];
+  overallWinner: "baseline" | "skill" | "tie";
+  overallMagnitude: PairwiseMagnitude;
+  overallReasoning: string;
+  positionSwapConsistent: boolean;
+}
+
+export const PAIRWISE_MAGNITUDE_SCORES: Record<PairwiseMagnitude, number> = {
+  "much-better": 1.0,
+  "slightly-better": 0.4,
+  "equal": 0.0,
+  "slightly-worse": -0.4,
+  "much-worse": -1.0,
+};
+
+export type JudgeMode = "pairwise" | "independent" | "both";
+
 export interface ScenarioComparison {
   scenarioName: string;
   baseline: RunResult;
   withSkill: RunResult;
   improvementScore: number;
   breakdown: MetricBreakdown;
+  pairwiseResult?: PairwiseJudgeResult;
+  perRunScores?: number[];
 }
 
 export interface MetricBreakdown {
@@ -108,12 +144,20 @@ export interface MetricBreakdown {
   errorReduction: number;
 }
 
+export interface ConfidenceInterval {
+  low: number;
+  high: number;
+  level: number;
+}
+
 export interface SkillVerdict {
   skillName: string;
   skillPath: string;
   passed: boolean;
   scenarios: ScenarioComparison[];
   overallImprovementScore: number;
+  confidenceInterval?: ConfidenceInterval;
+  isSignificant?: boolean;
   reason: string;
 }
 
@@ -125,8 +169,10 @@ export interface ValidatorConfig {
   verbose: boolean;
   model: string;
   judgeModel: string;
+  judgeMode: JudgeMode;
   runs: number;
   judgeTimeout: number;
+  confidenceLevel: number;
   reporters: ReporterSpec[];
   skillPaths: string[];
   saveResults: boolean;

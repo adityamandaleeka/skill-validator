@@ -130,8 +130,10 @@ export function createProgram(): Command {
         verbose: opts.verbose,
         model: opts.model,
         judgeModel: opts.judgeModel || opts.model,
+        judgeMode: opts.judgeMode || "pairwise",
         runs: parseInt(opts.runs, 10),
         judgeTimeout: parseInt(opts.judgeTimeout, 10) * 1000,
+        confidenceLevel: parseFloat(opts.confidenceLevel || "0.95"),
         reporters:
           opts.reporter.length > 0
             ? opts.reporter
