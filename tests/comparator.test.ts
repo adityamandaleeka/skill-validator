@@ -130,4 +130,53 @@ describe("computeVerdict", () => {
     expect(verdict.passed).toBe(false);
     expect(verdict.reason).toContain("No scenarios");
   });
+
+  it("includes confidence interval in verdict", () => {
+    const baseline = makeRunResult({ tokenEstimate: 1000 }, { overallScore: 3 });
+    const withSkill = makeRunResult({ tokenEstimate: 500 }, { overallScore: 5 });
+    const comparison = compareScenario("test", baseline, withSkill);
+    comparison.perRunScores = [0.3, 0.25, 0.35];
+
+    const verdict = computeVerdict(mockSkill, [comparison], 0.1, true, 0.95);
+    expect(verdict.confidenceInterval).toBeDefined();
+    expect(verdict.confidenceInterval!.level).toBe(0.95);
+    expect(verdict.confidenceInterval!.low).toBeGreaterThan(0);
+    expect(verdict.isSignificant).toBe(true);
+  });
+
+  it("marks as not significant when per-run scores span zero", () => {
+    const baseline = makeRunResult();
+    const withSkill = makeRunResult();
+    const comparison = compareScenario("test", baseline, withSkill);
+    comparison.perRunScores = [-0.1, 0.2, -0.05, 0.15, -0.08];
+
+    const verdict = computeVerdict(mockSkill, [comparison], 0.0, true, 0.95);
+    expect(verdict.confidenceInterval).toBeDefined();
+    expect(verdict.isSignificant).toBe(false);
+    expect(verdict.reason).toContain("not statistically significant");
+  });
+});
+
+describe("compareScenario with pairwise", () => {
+  it("overrides quality scores with pairwise results", () => {
+    const baseline = makeRunResult({}, { overallScore: 3, rubricScores: [{ criterion: "Q", score: 3, reasoning: "" }] });
+    const withSkill = makeRunResult({}, { overallScore: 3, rubricScores: [{ criterion: "Q", score: 3, reasoning: "" }] });
+
+    // Without pairwise, quality should be 0
+    const noPairwise = compareScenario("test", baseline, withSkill);
+    expect(noPairwise.breakdown.qualityImprovement).toBe(0);
+
+    // With pairwise saying skill is better
+    const pairwise = {
+      rubricResults: [{ criterion: "Q", winner: "skill" as const, magnitude: "much-better" as const, reasoning: "" }],
+      overallWinner: "skill" as const,
+      overallMagnitude: "much-better" as const,
+      overallReasoning: "",
+      positionSwapConsistent: true,
+    };
+    const withPairwise = compareScenario("test", baseline, withSkill, pairwise);
+    expect(withPairwise.breakdown.qualityImprovement).toBe(1.0);
+    expect(withPairwise.breakdown.overallJudgmentImprovement).toBe(1.0);
+    expect(withPairwise.pairwiseResult).toBe(pairwise);
+  });
 });
