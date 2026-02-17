@@ -114,6 +114,23 @@ Rubric items are evaluated by an LLM judge that sees both the baseline and skill
 
 In independent mode, rubric items are scored 1–5 per run. Quality metrics have the highest weight (0.70 combined) in the improvement score.
 
+## Skill profile analysis
+
+Before running the A/B evaluation, skill-validator performs static analysis of each SKILL.md and reports a one-line profile:
+
+```
+📊 crank-benchmarking: 1,722 tokens (detailed ✓), 29 sections, 24 code blocks
+   ⚠  No numbered workflow steps detected
+```
+
+This is grounded in [SkillsBench](https://arxiv.org/abs/2602.12670) findings (84 tasks, 7,308 trajectories):
+- **"Detailed" and "compact" skills work best** (+18.8pp and +17.1pp improvement)
+- **"Comprehensive" skills hurt performance** (–2.9pp) — long documents create cognitive overhead
+- **Sweet spot is 800–2,500 tokens** (ecosystem median: 1,569 tokens)
+- **2–3 focused skills outperform 4+** skills bundled together
+
+When a skill fails validation, the profile warnings appear in the diagnosis to suggest what to fix.
+
 ## Metrics & scoring
 
 The improvement score is a weighted sum. Quality is heavily prioritized — a skill that improves output quality will pass even if it uses more tokens:
@@ -147,14 +164,15 @@ By default (`--judge-mode pairwise`), the LLM judge sees both baseline and skill
 Results include bootstrap confidence intervals computed across individual runs. The output shows:
 
 ```
-✓ my-skill  +18.5%  [+8.2%, +28.8%] significant
-✗ other-skill  +6.3%  [-2.1%, +14.7%] not significant
+✓ my-skill  +18.5%  [+8.2%, +28.8%] significant  (g=+24.3%)
+✗ other-skill  +6.3%  [-2.1%, +14.7%] not significant  (g=+8.1%)
 ```
 
 - **significant**: the 95% CI doesn't cross zero — the improvement is real
 - **not significant**: the CI crosses zero — could be noise
+- **g=**: normalized gain, controlling for ceiling effects (a skill improving a strong baseline is harder than improving a weak one)
 
-For reliable significance testing, use `--runs 5` or higher (a warning is shown for fewer runs).
+The default of 5 runs provides sufficient precision for significance testing (validated by [SkillsBench](https://arxiv.org/abs/2602.12670)).
 
 ## CLI flags
 
@@ -164,9 +182,9 @@ For reliable significance testing, use `--runs 5` or higher (a warning is shown 
 | `--judge-model <name>` | same as `--model` | Model for LLM judge (can be different) |
 | `--judge-mode <mode>` | `pairwise` | Judge mode: `pairwise`, `independent`, or `both` |
 | `--min-improvement <n>` | `0.1` | Minimum improvement score (0–1) |
-| `--runs <n>` | `3` | Runs per scenario (averaged for stability) |
+| `--runs <n>` | `5` | Runs per scenario (averaged for stability) |
 | `--confidence-level <n>` | `0.95` | Confidence level for statistical intervals (0–1) |
-| `--judge-timeout <n>` | `120` | Judge LLM timeout in seconds |
+| `--judge-timeout <n>` | `300` | Judge LLM timeout in seconds |
 | `--require-completion` | `true` | Fail if skill regresses task completion |
 | `--require-evals` | `false` | Fail if skill has no tests/eval.yaml |
 | `--strict` | `false` | Enable --require-evals and strict checking |

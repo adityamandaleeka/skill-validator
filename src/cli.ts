@@ -7,6 +7,7 @@ import { judgeRun } from "./judge.js";
 import { pairwiseJudge } from "./pairwise-judge.js";
 import { compareScenario, computeVerdict } from "./comparator.js";
 import { reportResults, saveRunResults } from "./reporter.js";
+import { analyzeSkill, formatProfileLine, formatProfileWarnings } from "./skill-profile.js";
 import type {
   ValidatorConfig,
   ReporterSpec,
@@ -112,8 +113,8 @@ export function createProgram(): Command {
     .option("--model <name>", "Model to use for agent runs", "claude-opus-4.6")
     .option("--judge-model <name>", "Model to use for judging (defaults to --model)")
     .option("--judge-mode <mode>", "Judge mode: pairwise, independent, or both", "pairwise")
-    .option("--runs <number>", "Number of runs per scenario for averaging", "3")
-    .option("--judge-timeout <number>", "Judge timeout in seconds", "120")
+    .option("--runs <number>", "Number of runs per scenario for averaging", "5")
+    .option("--judge-timeout <number>", "Judge timeout in seconds", "300")
     .option("--confidence-level <number>", "Confidence level for statistical intervals (0-1)", "0.95")
     .option(
       "--results-dir <path>",
@@ -219,6 +220,14 @@ export async function run(config: ValidatorConfig): Promise<number> {
     }
 
     console.log(`🔍 Evaluating ${skill.name}...`);
+
+    // Static skill profile analysis
+    const profile = analyzeSkill(skill);
+    console.log(`   ${formatProfileLine(profile)}`);
+    for (const warning of formatProfileWarnings(profile)) {
+      console.log(warning);
+    }
+
     const comparisons: ScenarioComparison[] = [];
     const spinner = new Spinner();
     const log = (msg: string) => spinner.log(msg);
@@ -389,6 +398,7 @@ export async function run(config: ValidatorConfig): Promise<number> {
       config.requireCompletion,
       config.confidenceLevel
     );
+    verdict.profileWarnings = profile.warnings;
     verdicts.push(verdict);
   }
 

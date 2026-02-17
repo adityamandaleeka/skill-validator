@@ -123,6 +123,11 @@ export function computeVerdict(
     comparisons.reduce((sum, c) => sum + c.improvementScore, 0) /
     comparisons.length;
 
+  // Normalized gain: g = (post - pre) / (1 - pre), per Hake (1998)
+  // Controls for ceiling effects — a skill helping a 80% baseline
+  // to 90% is more impressive than helping 20% to 30%.
+  const normalizedGain = computeNormalizedGain(comparisons);
+
   const ci = bootstrapConfidenceInterval(allPerRunScores, confidenceLevel);
   const significant = isStatisticallySignificant(ci);
 
@@ -138,6 +143,7 @@ export function computeVerdict(
         passed: false,
         scenarios: comparisons,
         overallImprovementScore,
+        normalizedGain,
         confidenceInterval: ci,
         isSignificant: significant,
         reason: "Skill regressed on task completion in one or more scenarios",
@@ -161,8 +167,38 @@ export function computeVerdict(
     passed,
     scenarios: comparisons,
     overallImprovementScore,
+    normalizedGain,
     confidenceInterval: ci,
     isSignificant: significant,
     reason,
   };
+}
+
+/**
+ * Normalized gain: g = (post - pre) / (1 - pre)
+ * Per Hake (1998), used in SkillsBench to control for ceiling effects.
+ * Uses the overall judge scores (1-5 scale, normalized to 0-1) as the
+ * pre/post measure since they capture holistic quality.
+ */
+function computeNormalizedGain(comparisons: ScenarioComparison[]): number {
+  if (comparisons.length === 0) return 0;
+
+  let totalGain = 0;
+  let count = 0;
+
+  for (const c of comparisons) {
+    // Normalize 1-5 judge scores to 0-1
+    const pre = (c.baseline.judgeResult.overallScore - 1) / 4;
+    const post = (c.withSkill.judgeResult.overallScore - 1) / 4;
+
+    if (pre >= 1) {
+      // Already at ceiling — gain is 0 if maintained, negative if dropped
+      totalGain += post >= pre ? 0 : post - pre;
+    } else {
+      totalGain += (post - pre) / (1 - pre);
+    }
+    count++;
+  }
+
+  return count > 0 ? totalGain / count : 0;
 }
