@@ -156,9 +156,11 @@ export interface SkillVerdict {
   passed: boolean;
   scenarios: ScenarioComparison[];
   overallImprovementScore: number;
+  normalizedGain?: number;
   confidenceInterval?: ConfidenceInterval;
   isSignificant?: boolean;
   reason: string;
+  profileWarnings?: string[];
 }
 
 export interface ValidatorConfig {

@@ -122,9 +122,20 @@ function reportConsole(verdicts: SkillVerdict[], verbose: boolean): void {
         : chalk.yellow("not significant");
       scoreLine += `  ${chalk.dim(ciStr)} ${sigStr}`;
     }
+    if (verdict.normalizedGain !== undefined) {
+      scoreLine += `  ${chalk.dim(`(g=${formatPct(verdict.normalizedGain)})`)}`;
+    }
     console.log(scoreLine);
     console.log(`  ${chalk.dim(verdict.reason)}`);
 
+    // Show profile warnings as diagnosis when skill fails
+    if (!verdict.passed && verdict.profileWarnings && verdict.profileWarnings.length > 0) {
+      console.log();
+      console.log(`  ${chalk.yellow("Possible causes from skill analysis:")}`);
+      for (const warning of verdict.profileWarnings) {
+        console.log(`    ${chalk.dim("•")} ${chalk.dim(warning)}`);
+      }
+    }
     if (verdict.scenarios.length > 0) {
       console.log();
       for (const scenario of verdict.scenarios) {
