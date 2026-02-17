@@ -337,9 +337,19 @@ export async function run(config: ValidatorConfig): Promise<number> {
         spinner.stop(`      ✓ ${runLabel} agents complete, judging in background...`);
       }
 
-      // Wait for all judge calls to finish
+      // Wait for all judge calls to finish - abort on any judge failure
       spinner.start(`      Waiting for judges to complete...`);
-      await Promise.all(pendingJudges);
+      try {
+        await Promise.all(pendingJudges);
+      } catch (error) {
+        spinner.stop();
+        const errMsg = error instanceof Error ? error.message : String(error);
+        console.error(chalk.red(`\n❌ FATAL: Judge unavailable - aborting evaluation`));
+        console.error(chalk.red(`   ${errMsg}`));
+        console.error(chalk.dim(`   Judge failures are catastrophic. Check your model and judge-timeout settings.`));
+        await stopSharedClient();
+        return 1;
+      }
       spinner.stop(`      ✓ All ${config.runs} run(s) judged`);
 
       // Compute per-run comparisons for CI, then average for display
