@@ -2,7 +2,7 @@ import { Command } from "commander";
 import chalk from "chalk";
 import { discoverSkills } from "./discovery.js";
 import { runAgent, stopSharedClient, getSharedClient } from "./runner.js";
-import { evaluateAssertions } from "./assertions.js";
+import { evaluateAssertions, evaluateConstraints } from "./assertions.js";
 import { judgeRun } from "./judge.js";
 import { pairwiseJudge } from "./pairwise-judge.js";
 import { compareScenario, computeVerdict } from "./comparator.js";
@@ -268,16 +268,32 @@ export async function run(config: ValidatorConfig): Promise<number> {
           baselineMetrics.assertionResults = await evaluateAssertions(
             scenario.assertions,
             baselineMetrics.agentOutput,
-            process.cwd()
+            baselineMetrics.workDir
           );
-          baselineMetrics.taskCompleted =
-            baselineMetrics.assertionResults.every((a) => a.passed);
 
           withSkillMetrics.assertionResults = await evaluateAssertions(
             scenario.assertions,
             withSkillMetrics.agentOutput,
-            process.cwd()
+            withSkillMetrics.workDir
           );
+        }
+
+        // Evaluate scenario-level constraints
+        const baselineConstraints = evaluateConstraints(scenario, baselineMetrics);
+        const withSkillConstraints = evaluateConstraints(scenario, withSkillMetrics);
+        baselineMetrics.assertionResults = [
+          ...baselineMetrics.assertionResults,
+          ...baselineConstraints,
+        ];
+        withSkillMetrics.assertionResults = [
+          ...withSkillMetrics.assertionResults,
+          ...withSkillConstraints,
+        ];
+
+        // Determine task completion from all assertion + constraint results
+        if (scenario.assertions || baselineConstraints.length > 0) {
+          baselineMetrics.taskCompleted =
+            baselineMetrics.assertionResults.every((a) => a.passed);
           withSkillMetrics.taskCompleted =
             withSkillMetrics.assertionResults.every((a) => a.passed);
         } else {

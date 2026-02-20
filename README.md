@@ -89,7 +89,13 @@ scenarios:
         path: "*.csv"
       - type: "file_not_exists"
         path: "*.csproj"
+      - type: "file_contains"
+        path: "*.cs"
+        value: "stackalloc"
       - type: "exit_success"
+    expect_tools: ["bash"]
+    reject_tools: ["create_file"]
+    max_turns: 15
     rubric:
       - "The output is well-formatted and clear"
       - "The agent correctly handled edge cases"
@@ -106,7 +112,31 @@ scenarios:
 | `output_not_matches` | Agent output does NOT match `pattern` |
 | `file_exists` | File matching `path` glob exists in work dir |
 | `file_not_exists` | No file matching `path` glob exists in work dir |
+| `file_contains` | File matching `path` glob contains `value` |
 | `exit_success` | Agent produced non-empty output |
+
+### Scenario constraints
+
+Constraints are declarative checks against run metrics — no regex or globs needed:
+
+```yaml
+scenarios:
+  - name: "Test C# scripting"
+    prompt: "Test stackalloc with nint"
+    expect_tools: ["bash"]           # agent must use these tools
+    reject_tools: ["create_file"]    # agent must NOT use these tools
+    max_turns: 10                    # agent must finish within N turns
+    max_tokens: 5000                 # agent must use fewer than N tokens
+```
+
+| Constraint | Description |
+|-----------|-------------|
+| `expect_tools` | List of tool names the agent must use |
+| `reject_tools` | List of tool names the agent must NOT use |
+| `max_turns` | Maximum number of agent turns allowed |
+| `max_tokens` | Maximum token usage allowed |
+
+Constraints are evaluated alongside assertions — a failed constraint means a failed task.
 
 ### Rubric
 
