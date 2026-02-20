@@ -1,11 +1,15 @@
 import { z } from "zod";
 
-const assertionSchema = z.object({
-  type: z.enum(["file_exists", "file_not_exists", "output_contains", "output_not_contains", "output_matches", "output_not_matches", "exit_success"]),
-  path: z.string().optional(),
-  value: z.string().optional(),
-  pattern: z.string().optional(),
-});
+const assertionSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("file_exists"), path: z.string().min(1) }),
+  z.object({ type: z.literal("file_not_exists"), path: z.string().min(1) }),
+  z.object({ type: z.literal("file_contains"), path: z.string().min(1), value: z.string().min(1) }),
+  z.object({ type: z.literal("output_contains"), value: z.string().min(1) }),
+  z.object({ type: z.literal("output_not_contains"), value: z.string().min(1) }),
+  z.object({ type: z.literal("output_matches"), pattern: z.string().min(1) }),
+  z.object({ type: z.literal("output_not_matches"), pattern: z.string().min(1) }),
+  z.object({ type: z.literal("exit_success") }),
+]);
 
 const setupFileSchema = z.object({
   path: z.string(),
@@ -24,6 +28,10 @@ const scenarioSchema = z.object({
   assertions: z.array(assertionSchema).optional(),
   rubric: z.array(z.string()).optional(),
   timeout: z.number().positive().optional().default(120),
+  expect_tools: z.array(z.string()).optional(),
+  reject_tools: z.array(z.string()).optional(),
+  max_turns: z.number().positive().int().optional(),
+  max_tokens: z.number().positive().int().optional(),
 });
 
 export const evalConfigSchema = z.object({
