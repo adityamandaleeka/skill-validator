@@ -1,6 +1,6 @@
 import chalk from "chalk";
 import { writeFile, mkdir } from "node:fs/promises";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
 import type { SkillVerdict, ReporterSpec, ScenarioComparison } from "./types.js";
 
 export async function reportResults(
@@ -350,6 +350,7 @@ async function reportJson(
 ): Promise<void> {
   const json = JSON.stringify(verdicts, null, 2);
   if (outputPath) {
+    await mkdir(dirname(outputPath), { recursive: true });
     await writeFile(outputPath, json, "utf-8");
     console.log(`JSON results written to ${outputPath}`);
   } else {
