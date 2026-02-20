@@ -33,7 +33,7 @@ async function fileExists(path: string): Promise<boolean> {
   }
 }
 
-async function discoverSkillAt(dirPath: string): Promise<SkillInfo | null> {
+async function discoverSkillAt(dirPath: string, testsDir?: string): Promise<SkillInfo | null> {
   const skillMdPath = join(dirPath, "SKILL.md");
   if (!(await fileExists(skillMdPath))) return null;
 
@@ -46,7 +46,9 @@ async function discoverSkillAt(dirPath: string): Promise<SkillInfo | null> {
   let evalPath: string | null = null;
   let evalConfig: EvalConfig | null = null;
 
-  const evalFilePath = join(dirPath, "tests", "eval.yaml");
+  const evalFilePath = testsDir
+    ? join(testsDir, basename(dirPath), "eval.yaml")
+    : join(dirPath, "tests", "eval.yaml");
   if (await fileExists(evalFilePath)) {
     evalPath = evalFilePath;
     const evalContent = await readFile(evalFilePath, "utf-8");
@@ -65,11 +67,11 @@ async function discoverSkillAt(dirPath: string): Promise<SkillInfo | null> {
   };
 }
 
-export async function discoverSkills(targetPath: string): Promise<SkillInfo[]> {
+export async function discoverSkills(targetPath: string, testsDir?: string): Promise<SkillInfo[]> {
   const skills: SkillInfo[] = [];
 
   // Check if the target itself is a skill
-  const directSkill = await discoverSkillAt(targetPath);
+  const directSkill = await discoverSkillAt(targetPath, testsDir);
   if (directSkill) {
     skills.push(directSkill);
     return skills;
@@ -81,7 +83,7 @@ export async function discoverSkills(targetPath: string): Promise<SkillInfo[]> {
   const entries = await readdir(targetPath, { withFileTypes: true });
   for (const entry of entries) {
     if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
-    const skill = await discoverSkillAt(join(targetPath, entry.name));
+    const skill = await discoverSkillAt(join(targetPath, entry.name), testsDir);
     if (skill) skills.push(skill);
   }
 

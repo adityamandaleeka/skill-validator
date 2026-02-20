@@ -188,6 +188,7 @@ export interface ValidatorConfig {
   skillPaths: string[];
   saveResults: boolean;
   resultsDir: string;
+  testsDir?: string;
 }
 
 export interface ReporterSpec {

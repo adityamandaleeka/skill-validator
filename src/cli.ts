@@ -122,6 +122,10 @@ export function createProgram(): Command {
       ".skill-validator-results"
     )
     .option(
+      "--tests-dir <path>",
+      "Directory containing test subdirectories (resolved as <tests-dir>/<skill-name>/eval.yaml)"
+    )
+    .option(
       "--reporter <spec>",
       "Reporter (console, json:path, junit:path). Can be repeated.",
       (val: string, prev: ReporterSpec[]) => [...prev, parseReporter(val)],
@@ -147,6 +151,7 @@ export function createProgram(): Command {
         skillPaths: paths,
         saveResults: opts.saveResults !== false,
         resultsDir: opts.resultsDir,
+        testsDir: opts.testsDir,
       };
 
       const exitCode = await run(config);
@@ -183,7 +188,7 @@ export async function run(config: ValidatorConfig): Promise<number> {
 
   // Discover skills
   const allSkills = (
-    await Promise.all(config.skillPaths.map(discoverSkills))
+    await Promise.all(config.skillPaths.map((p) => discoverSkills(p, config.testsDir)))
   ).flat();
 
   if (allSkills.length === 0) {
