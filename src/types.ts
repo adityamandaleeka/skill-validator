@@ -19,6 +19,10 @@ export interface EvalScenario {
   assertions?: Assertion[];
   rubric?: string[];
   timeout?: number;
+  expect_tools?: string[];
+  reject_tools?: string[];
+  max_turns?: number;
+  max_tokens?: number;
 }
 
 export interface SetupConfig {
@@ -34,11 +38,16 @@ export interface SetupFile {
 export type AssertionType =
   | "file_exists"
   | "file_not_exists"
+  | "file_contains"
   | "output_contains"
   | "output_not_contains"
   | "output_matches"
   | "output_not_matches"
-  | "exit_success";
+  | "exit_success"
+  | "expect_tools"
+  | "reject_tools"
+  | "max_turns"
+  | "max_tokens";
 
 export interface Assertion {
   type: AssertionType;

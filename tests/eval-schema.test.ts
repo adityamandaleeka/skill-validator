@@ -51,6 +51,38 @@ describe("parseEvalConfig", () => {
       })
     ).toThrow();
   });
+  it("parses file_contains assertion", () => {
+    const config = parseEvalConfig({
+      scenarios: [
+        {
+          name: "Test",
+          prompt: "Do it",
+          assertions: [{ type: "file_contains", path: "*.cs", value: "stackalloc" }],
+        },
+      ],
+    });
+    expect(config.scenarios[0].assertions![0].type).toBe("file_contains");
+  });
+
+  it("parses scenario-level constraints", () => {
+    const config = parseEvalConfig({
+      scenarios: [
+        {
+          name: "Test",
+          prompt: "Do it",
+          expect_tools: ["bash"],
+          reject_tools: ["create_file"],
+          max_turns: 10,
+          max_tokens: 5000,
+        },
+      ],
+    });
+    const s = config.scenarios[0];
+    expect(s.expect_tools).toEqual(["bash"]);
+    expect(s.reject_tools).toEqual(["create_file"]);
+    expect(s.max_turns).toBe(10);
+    expect(s.max_tokens).toBe(5000);
+  });
 });
 
 describe("validateEvalConfig", () => {
