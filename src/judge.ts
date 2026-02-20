@@ -186,7 +186,7 @@ function formatSessionTimeline(events: RunMetrics["events"]): string {
           return `[ASSISTANT] ${parts.join(" ")}`;
         }
         case "tool.execution_start":
-          return `[TOOL START] ${e.data.toolName}: ${truncateForJudge(String(e.data.arguments || ""), 200)}`;
+          return `[TOOL START] ${e.data.toolName}: ${truncateForJudge(typeof e.data.arguments === "string" ? e.data.arguments : JSON.stringify(e.data.arguments) || "", 200)}`;
         case "tool.execution_complete": {
           const success = e.data.success === "True" || e.data.success === true;
           const result = truncateForJudge(String(e.data.result || ""), 300);
