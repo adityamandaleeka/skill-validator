@@ -148,11 +148,11 @@ For each rubric criterion, decide:
 
 Also provide an overall verdict with the same fields.
 
-Consider the full session timeline:
-- Did the agent take an efficient path or waste steps?
+Focus on the QUALITY of the final result, not operational efficiency:
+- Quality and correctness of the final output
 - Did it recover from errors or get stuck?
 - Was the approach methodical or haphazard?
-- Quality and correctness of the final output
+- Do NOT factor in token count, number of tool calls, or execution speed — those are scored separately
 
 Respond in JSON format:
 {
@@ -201,10 +201,7 @@ function formatRunSection(label: string, metrics: RunMetrics): string {
 ${metrics.agentOutput || "(no output)"}
 
 ### Metrics
-- Tool calls: ${metrics.toolCallCount}
 - Tools used: ${Object.entries(metrics.toolCallBreakdown).map(([k, v]) => `${k}(${v})`).join(", ") || "none"}
-- Turns: ${metrics.turnCount}
-- Time: ${(metrics.wallTimeMs / 1000).toFixed(1)}s
 - Errors: ${metrics.errorCount}
 
 ### Session Timeline
