@@ -56,6 +56,7 @@ export async function getSharedClient(verbose: boolean): Promise<CopilotClient> 
   const mod = await import("@github/copilot-sdk");
   const options: CopilotClientOptions = {
     logLevel: verbose ? "info" : "none",
+    ...(process.env.GITHUB_TOKEN ? { githubToken: process.env.GITHUB_TOKEN } : {}),
   };
   _sharedClient = new mod.CopilotClient(options);
   await _sharedClient.start();
