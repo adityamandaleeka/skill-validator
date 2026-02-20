@@ -242,7 +242,7 @@ function formatTimelineCompact(events: RunMetrics["events"]): string {
           return `[ASSISTANT] ${parts.join(" ")}`;
         }
         case "tool.execution_start":
-          return `[TOOL START] ${e.data.toolName}: ${trunc(String(e.data.arguments || ""), 200)}`;
+          return `[TOOL START] ${e.data.toolName}: ${trunc(typeof e.data.arguments === "string" ? e.data.arguments : JSON.stringify(e.data.arguments) || "", 200)}`;
         case "tool.execution_complete": {
           const success = e.data.success === "True" || e.data.success === true;
           return `[TOOL ${success ? "OK" : "FAIL"}] ${trunc(String(e.data.result || ""), 200)}`;
